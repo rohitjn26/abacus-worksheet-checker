@@ -82,3 +82,19 @@ def normalize(gray, printed=False):
     oy, ox = (H - r.shape[0]) // 2, (W - r.shape[1]) // 2
     out[oy : oy + r.shape[0], ox : ox + r.shape[1]] = r
     return out
+
+
+def clean_printed(gray):
+    """Grey crop of a printed cell with marks standing apart from the printed number painted out
+    (same rule as normalize(printed=True), but keeps the photo look for readers that want raw crops)."""
+    ink = to_ink(gray)
+    mask = (ink > 0.35).astype(np.uint8)
+    n, labels, stats, _ = cv2.connectedComponentsWithStats(mask)
+    keep = [i for i in range(1, n) if stats[i, cv2.CC_STAT_AREA] >= max(4, mask.size * 0.0015)]
+    if not keep:
+        return gray
+    cluster = set(main_cluster(stats, keep))
+    drop = np.isin(labels, [i for i in keep if i not in cluster])
+    out = gray.copy()
+    out[cv2.dilate(drop.astype(np.uint8), np.ones((3, 3), np.uint8)) > 0] = int(np.percentile(gray, 80))
+    return out

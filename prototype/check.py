@@ -13,7 +13,7 @@ from cells import label_cells, split_table, table_rows
 from grid import find_tables, fix_orientation, grid_lines
 from model import decode, load_reader
 from hand_reader import HandReader
-from norm import ALPHABET, normalize
+from norm import ALPHABET, clean_printed, normalize
 from model import string_logprob
 from policy import decide
 
@@ -22,14 +22,17 @@ CELL = re.compile(r"^([×÷+]?)(-?\d+(?:\.\d+)?)$")
 
 
 HAND_READER = "paddle"  # "paddle": PaddleOCR (frozen) + trained head for answers; "own": our model
+PRINTED_READER = "own"  # "own": our model for printed numbers / headers / ANS; "paddle": PaddleOCR + full head
 
 
 class Reader:
-    def __init__(self, weights="reader_v2.pt", hand=None):
+    def __init__(self, weights="reader_v2.pt", hand=None, printed=None):
         self.model = load_reader(weights)
         self.model.eval()
         hand = hand or HAND_READER
         self.hand = HandReader() if hand == "paddle" else None
+        printed = printed or PRINTED_READER
+        self.paddle_all = HandReader(head_path="full_head.pt", alphabet=ALPHABET) if printed == "paddle" else None
 
     def answer_log_probs(self, crops):
         """(log-probs, alphabet) for handwritten answer crops."""
@@ -42,6 +45,8 @@ class Reader:
         return text == "ANS" and conf >= 0.5
 
     def log_probs(self, crops, printed=False):
+        if self.paddle_all is not None:
+            return self.paddle_all.log_probs([clean_printed(c) if printed else c for c in crops])
         x = torch.from_numpy(np.stack([normalize(c, printed) for c in crops]))[:, None]
         with torch.no_grad():
             return self.model(x)
