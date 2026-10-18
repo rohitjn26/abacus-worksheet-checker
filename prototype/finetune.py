@@ -58,9 +58,12 @@ def main():
     lab = {"x": np.zeros((0, 32, 128), np.float32), "y": np.array([], str), "test": np.array([], bool)}
     if os.path.exists("labelcells.npz"):  # optional: real label-column cells (ANS / A / B / C / blank)
         lab = dict(np.load("labelcells.npz"))
-    d = {"x": np.concatenate([d["x"], lab["x"]]), "y": np.concatenate([d["y"], lab["y"]]),
-         "kind": np.concatenate([d["kind"], np.full(len(lab["y"]), "label")]),
-         "test": np.concatenate([d["test"], lab["test"]])}
+    aug = {"x": np.zeros((0, 32, 128), np.float32), "y": np.array([], str), "kind": np.array([], str)}
+    if os.path.exists("augset.npz"):  # optional: cells from augmented (bad-photo) training photos
+        aug = dict(np.load("augset.npz"))
+    d = {"x": np.concatenate([d["x"], lab["x"], aug["x"]]), "y": np.concatenate([d["y"], lab["y"], aug["y"]]),
+         "kind": np.concatenate([d["kind"], np.full(len(lab["y"]), "label"), aug["kind"]]),
+         "test": np.concatenate([d["test"], lab["test"], np.zeros(len(aug["y"]), bool)])}
     train_idx = np.where(~d["test"])[0]
     model = load_reader(INIT, dev)
     report(model, dev, d, "before")

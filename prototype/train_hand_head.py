@@ -1,7 +1,7 @@
 """Train the handwriting head on PaddleOCR's frozen features (training photos + synthetic cells only).
 
 Features come from paddle_exp/extract_feats.py (same numbers as the ONNX model in hand_reader.py).
-usage: python train_hand_head.py <paddle_feats.npz> [out=hand_head.pt]
+usage: python train_hand_head.py <paddle_feats.npz> [out=hand_head.pt] [aug_feats.npz]
 """
 import sys
 import numpy as np
@@ -14,10 +14,13 @@ d = np.load(sys.argv[1])
 out = sys.argv[2] if len(sys.argv) > 2 else "hand_head.pt"
 X = np.concatenate([np.repeat(d["train_x"], 5, axis=0), d["synth_x"]]).astype(np.float32)  # real x5 + synthetic
 Y = list(np.repeat(d["train_y"], 5)) + list(d["synth_y"])
+if len(sys.argv) > 3:  # cells from augmented (bad-photo) versions of the training photos
+    a = np.load(sys.argv[3])
+    X, Y = np.concatenate([X, a["x"].astype(np.float32)]), Y + list(a["y"])
 dev = "mps" if torch.backends.mps.is_available() else "cpu"
 head = HandHead().to(dev)
 opt = torch.optim.AdamW(head.parameters(), lr=2e-3, weight_decay=1e-4)
-steps, bs = 3000, 128
+steps, bs = 3000 if len(sys.argv) <= 3 else 5000, 128
 sched = torch.optim.lr_scheduler.CosineAnnealingLR(opt, steps)
 for step in range(steps):
     idx = np.random.randint(0, len(X), bs)

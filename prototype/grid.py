@@ -2,6 +2,8 @@
 import cv2
 import numpy as np
 
+LOW_CONTRAST = 120  # photos with less contrast than this (p98 - p2 grey levels) are stretched before finding lines
+
 
 def fix_orientation(img):
     """Turn the photo so table lines run mainly horizontally (tables are wider than tall).
@@ -13,7 +15,7 @@ def fix_orientation(img):
 
 def line_masks(gray, hlen=None, vlen=None):
     """Binary masks of horizontal / vertical strokes at least hlen / vlen pixels long."""
-    bw = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 15)
+    bw = binarize(gray)
     h, w = gray.shape
     hlen, vlen = hlen or max(w // 30, 20), vlen or max(h // 30, 15)
     horiz = cv2.morphologyEx(bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (int(hlen), 1)))
@@ -104,7 +106,13 @@ def angled_open(bw, length, angles, vertical):
 
 
 def binarize(gray):
-    return cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 15)
+    """Ink / line pixels; only used for finding lines, never fed to a model. Good photos are binarized as
+    they are; a low-contrast (dark / shadowed) photo is first stretched to normal contrast."""
+    g = gray.astype(np.float32)
+    lo, hi = np.percentile(g, 2), np.percentile(g, 98)
+    if hi - lo < LOW_CONTRAST:
+        g = np.clip((g - lo) * (LOW_CONTRAST / max(hi - lo, 1)) + lo, 0, 255)
+    return cv2.adaptiveThreshold(g.astype(np.uint8), 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 15)
 
 
 def column_curves(table):
@@ -162,4 +170,13 @@ def grid_lines(table):
         curves.append(curves[-1] + np.poly1d([min(m, w - 1 - mids[-1])]))
     if mids[0] > 0.6 * m:
         curves.insert(0, curves[0] - np.poly1d([min(m, mids[0])]))
-    return rectify_columns(table, curves)
+    # Columns are equal width: a gap of ~k columns means k-1 lines were missed (faint, dark or blurred);
+    # put them back evenly. Otherwise two columns merge and one child's answer is read with another's.
+    filled = curves[:1]
+    for f in curves[1:]:
+        gap = f(h / 2) - filled[-1](h / 2)
+        k = round(gap / m)
+        if k >= 2 and abs(gap / k - m) < 0.25 * m:
+            filled += [filled[-1] + (f - filled[-1]) * (j / k) for j in range(1, k)]
+        filled.append(f)
+    return rectify_columns(table, filled)

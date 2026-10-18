@@ -122,6 +122,7 @@ def split_table(table, xs, read, is_ans):
     # Walk upward from ANS; keep rows where most columns read as numbers. Mostly-blank rows (ragged
     # columns) are skipped; anything else (header row I, II, III...) ends the number block.
     numbers = [[] for _ in cols]
+    gaps = [False for _ in cols]  # a number row where this column's cell came out blank (glare, fading...)
     for r in range(max(len(c["above"]) for c in cols)):
         texts = []
         for c in cols:
@@ -137,9 +138,12 @@ def split_table(table, xs, read, is_ans):
             if n_blank > len(cols) / 2:
                 continue
             break
-        for n, (cell, t) in zip(numbers, texts):
+        for i, (n, (cell, t)) in enumerate(zip(numbers, texts)):
             if cell is not None and t:
                 n.insert(0, (cell, t))
+            else:
+                gaps[i] = True
 
-    return [{"numbers": n, "answer": c["answer"], "answer_crops": c["answer_crops"], "answer_box": c["answer_box"]}
-            for n, c in zip(numbers, cols)]
+    return [{"numbers": n, "missing_number": g, "answer": c["answer"], "answer_crops": c["answer_crops"],
+             "answer_box": c["answer_box"]}
+            for n, g, c in zip(numbers, gaps, cols)]

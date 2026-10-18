@@ -16,21 +16,24 @@ from hand_reader import HandReader
 from norm import ALPHABET, clean_printed, normalize
 from model import string_logprob
 from policy import decide
+from quality import retake_reasons
 
 PRINTED_MIN_CONF = 0.90   # below this, a printed number is not trusted -> teacher review (see calibrate.py)
 CELL = re.compile(r"^([×÷+]?)(-?\d+(?:\.\d+)?)$")
 
 
 HAND_READER = "paddle"  # "paddle": PaddleOCR (frozen) + trained head for answers; "own": our model
+READER_WEIGHTS = "reader_v3.pt"   # our model (printed numbers, headers, ANS)
+HAND_HEAD = "hand_head_v2.pt"     # head on frozen PaddleOCR for handwritten answers
 PRINTED_READER = "own"  # "own": our model for printed numbers / headers / ANS; "paddle": PaddleOCR + full head
 
 
 class Reader:
-    def __init__(self, weights="reader_v2.pt", hand=None, printed=None):
-        self.model = load_reader(weights)
+    def __init__(self, weights=None, hand=None, printed=None, hand_head=None):
+        self.model = load_reader(weights or READER_WEIGHTS)
         self.model.eval()
         hand = hand or HAND_READER
-        self.hand = HandReader() if hand == "paddle" else None
+        self.hand = HandReader(head_path=hand_head or HAND_HEAD) if hand == "paddle" else None
         printed = printed or PRINTED_READER
         self.paddle_all = HandReader(head_path="full_head.pt", alphabet=ALPHABET) if printed == "paddle" else None
 
@@ -138,9 +141,15 @@ def check_table(table, xs, reader):
         nums = [t for _, t in q["numbers"]]
         p_conf = min((conf for _, conf in reader([c for c, _ in q["numbers"]], printed=True)), default=0)
         correct = evaluate(nums)
-        r = {"q": i + 1, "numbers": nums, "correct": correct, "box": q["answer_box"]}
+        r = {"q": i + 1, "numbers": nums, "correct": correct, "box": q["answer_box"], "printed_conf": p_conf,
+             "col_w": float(np.median(np.diff(xs)))}
         (ans, conf), = decode(lps["tight"][:, i : i + 1], abc)
         r["given"], r["conf"] = ans, conf
+        if q["missing_number"] and ans:
+            # Other columns have a number in a row where this one came out blank: a printed number was lost.
+            r["status"], r["why"] = "review", "couldn't read the printed numbers"
+            results.append(r)
+            continue
         if correct is None or p_conf < PRINTED_MIN_CONF:
             r["status"], r["why"] = ("blank", "") if not ans else ("review", "couldn't read the printed numbers")
             if correct is None:
@@ -202,15 +211,19 @@ def scan_look(img):
     return np.clip(out, 0, 255).astype(np.uint8)
 
 
-def check_photo(path, reader):
-    img = cv2.imread(str(path))
+def check_photo(path, reader, report=None):
+    """path: image file, or an already-loaded BGR image.
+    report: optional dict; gets 'unread_tables' = worksheet tables found but not readable."""
+    img = path if isinstance(path, np.ndarray) else cv2.imread(str(path))
     if SCAN_LOOK:
         img = scan_look(img)
     all_results, panels = [], []
     for ti, (t, xs) in enumerate(worksheet_tables(img, reader)):
         try:
             res = check_table(t, xs, reader)
-        except ValueError:  # not a worksheet table (e.g. book edge), or no ANS row found
+        except ValueError:  # a worksheet table (it has 'ANS') whose rows/columns could not be lined up
+            if report is not None:
+                report["unread_tables"] = report.get("unread_tables", 0) + 1
             continue
         for r in res:
             r["table"] = ti + 1
@@ -229,7 +242,10 @@ def main():
     out = Path("results")
     out.mkdir(exist_ok=True)
     for path in sys.argv[1:]:
-        results, sheet = check_photo(path, reader)
+        report = {}
+        results, sheet = check_photo(path, reader, report)
+        for _, msg in retake_reasons(cv2.imread(str(path)), results, report):
+            print(f"  RETAKE: {msg}")
         if not results:
             print(f"\n== {Path(path).name}: no worksheet table found - please retake the photo ==")
             continue

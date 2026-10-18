@@ -20,3 +20,5 @@ prototype/labelcells.npz
 # PaddleOCR experiment: keep the scripts, not the data, models or cloned repo
 paddle_exp/*
 !paddle_exp/*.py
+prototype/augset.npz
+prototype/degrade_results*.json

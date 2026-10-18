@@ -20,29 +20,57 @@ def has_ink(cell):
     return "1" if normalize(cell).max() > 0 else ""
 
 
-def load(path="testset.json", root=".."):
-    """Returns list of (normalized_cell, label, kind, photo, tag, raw_crop); kind is 'printed' or 'hand'."""
-    from check import Reader, worksheet_tables  # imported here: check.py is the heavier module
-    reader = Reader()
-    truth = json.load(open(path))
+def cells_from_image(img, fname, tables, reader, verify=False):
+    """Labelled cells of one photo: list of (normalized_cell, label, kind, photo, tag, raw_crop).
+
+    verify=True (augmented photos): drop any table whose layout does not match the transcription, or whose
+    printed numbers mostly disagree with it - a sign the checker misread the grid, so labels would be wrong.
+    """
+    from check import worksheet_tables  # imported here: check.py is the heavier module
+    found = [g for g in worksheet_tables(img, reader) if len(g[1]) >= 11]
+    if len(found) != len(tables):
+        return []
     out = []
-    for fname, tables in truth.items():
+    for ti, ((t, xs), gt) in enumerate(zip(found, tables)):
+        try:
+            qs = split_table(t, xs, read=has_ink, is_ans=reader.is_ans)  # every inked row; align from the bottom
+        except ValueError:
+            continue
+        rows = []
+        for qi, (q, nums, ans) in enumerate(zip(qs, gt["numbers"], gt["answers"])):
+            tag = f"{fname[-14:-5]} T{ti + 1} Q{qi + 1}"
+            cells = q["numbers"][-len(nums):]
+            if len(cells) < len(nums):
+                rows = None
+                break
+            for ri, ((cell, _), n) in enumerate(zip(cells, nums)):
+                if n != "?":
+                    rows.append((normalize(cell), str(n), "printed", fname, f"{tag} r{ri + 1}", cell))
+            if ans != "?":
+                rows.append((normalize(q["answer"]), ans, "hand", fname, tag, q["answer"]))
+        if rows is None or (verify and len(qs) != len(gt["numbers"])):
+            continue
+        if verify:
+            printed = [r for r in rows if r[2] == "printed"]
+            reads = reader([r[5] for r in printed], printed=True)
+            if np.mean([p == r[1] for (p, _), r in zip(reads, printed)]) < 0.8:
+                continue
+        out += rows
+    return out
+
+
+def load(path="testset.json", root=".."):
+    """Labelled cells of every transcribed photo."""
+    from check import Reader
+    reader = Reader()
+    out = []
+    for fname, tables in json.load(open(path)).items():
         if fname.startswith("_"):
             continue
-        found = [g for g in worksheet_tables(cv2.imread(f"{root}/{fname}"), reader) if len(g[1]) >= 11]
-        if len(found) != len(tables):
-            print(f"  ! {fname}: found {len(found)} tables, truth has {len(tables)} - skipped")
-            continue
-        for ti, ((t, xs), gt) in enumerate(zip(found, tables)):
-            qs = split_table(t, xs, read=has_ink, is_ans=reader.is_ans)  # keep every inked row; align to truth from the bottom
-            for qi, (q, nums, ans) in enumerate(zip(qs, gt["numbers"], gt["answers"])):
-                tag = f"{fname[-14:-5]} T{ti + 1} Q{qi + 1}"
-                cells = q["numbers"][-len(nums):]
-                for ri, ((cell, _), n) in enumerate(zip(cells, nums)):
-                    if n != "?":
-                        out.append((normalize(cell), str(n), "printed", fname, f"{tag} r{ri + 1}", cell))
-                if ans != "?":
-                    out.append((normalize(q["answer"]), ans, "hand", fname, tag, q["answer"]))
+        cells = cells_from_image(cv2.imread(f"{root}/{fname}"), fname, tables, reader)
+        if not cells:
+            print(f"  ! {fname}: table layout does not match the transcription - skipped")
+        out += cells
     return out
 
 

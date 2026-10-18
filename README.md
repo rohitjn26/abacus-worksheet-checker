@@ -26,6 +26,23 @@ answer in the ANS row) and marks every answer right, wrong, or "please check". R
 
 The correct answer never turns an unclear reading into a "right"; it only stops a doubtful "wrong".
 
+## Photo-quality check (retake requests)
+
+Before marking, `quality.retake_reasons` decides whether the parent should retake the photo: too dark,
+grainy, blurry, glare, strong shadow, too far away, numbers unclear, worksheet not found, or part of the
+sheet unreadable. Thresholds come from `degrade_test.py`, which makes the sample photos progressively
+darker / blurrier / glarier / smaller etc. and finds where wrong marks start. On the held-out photos,
+across all degraded versions, the check accepts no photo that gets a wrong mark, and never asks to retake
+a good photo.
+
+## Training data
+
+- Synthetic cells (MNIST digits + fonts) - `synth.py`
+- Real cells from the training photos - `realset.py`
+- Whole-photo augmentation: random dark / shadow / glare / blur / shake / noise / distance / JPEG / tilt
+  versions of the training photos, labelled from the transcription - `augment_photos.py`
+  (held-out photos are never augmented or trained on).
+
 ## Usage
 
 ```bash
@@ -52,10 +69,12 @@ Marked sheets are written to `prototype/results/`:
 | `realset.py`, `finetune.py` | Real labelled cells and fine-tuning |
 | `calibrate.py`, `e2e.py` | Accuracy measurement on held-out photos |
 | `testset.json` | Hand transcription of the sample worksheets |
-| `reader_v2.pt` | Our model: printed numbers, headers, ANS label |
-| `hand_reader.py`, `hand_head.pt`, `ppocrv5_mobile_frozen.onnx` | Handwriting reader: frozen PaddleOCR + trained head |
+| `reader_v3.pt` | Our model: printed numbers, headers, ANS label |
+| `hand_reader.py`, `hand_head_v2.pt`, `ppocrv5_mobile_frozen.onnx` | Handwriting reader: frozen PaddleOCR + trained head |
+| `quality.py`, `degrade_test.py` | Photo-quality check (retake requests) and the bad-photo stress test |
+| `augment_photos.py` | Whole-photo augmentation of the training photos |
 | `train_hand_head.py` | Trains the handwriting head on frozen PaddleOCR features |
-| `reader.pt`, `reader_ft.pt` | Earlier weights (synthetic-only, first fine-tune), kept as training starting points |
+| `reader.pt`, `reader_ft.pt`, `reader_v2.pt`, `hand_head.pt` | Earlier weights, kept as training starting points |
 
 Worksheet photos are not included in this repo (they contain children's handwriting).
 `realset.py`, `finetune.py` and `e2e.py` expect them next to the `prototype/` folder.
@@ -75,6 +94,7 @@ subset of those weights.
 
 ## Status
 
-Prototype. On held-out photos: printed numbers 99%+ read correctly; ~88% of answers checked
-automatically, the rest sent to the teacher; no answer mis-marked so far. More handwriting samples
+Prototype. On held-out photos: printed numbers 99%+ read correctly; ~90% of answers checked
+automatically, the rest sent to the teacher; no answer mis-marked so far, including on artificially
+degraded versions of those photos that pass the quality check. More handwriting samples
 from different children are the main way to improve it.
