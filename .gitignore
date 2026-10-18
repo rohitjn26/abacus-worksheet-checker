@@ -1,0 +1,17 @@
+# Python
+.venv/
+__pycache__/
+*.log
+
+# Downloaded training data (MNIST)
+data/
+
+# Worksheet photos and anything derived from them (children's handwriting) - kept out of the repo
+*.jpeg
+*.jpg
+*.png
+*.heic
+prototype/results/
+prototype/realset.npz
+
+.DS_Store
