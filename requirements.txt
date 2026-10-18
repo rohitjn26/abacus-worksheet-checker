@@ -3,4 +3,3 @@ opencv-python-headless==5.0.0.93
 pillow==12.3.0
 torch==2.14.1
 torchvision==0.29.1
-ocrmac==1.0.1  # macOS only: Apple Vision, used to find the "ANS" label and page orientation

@@ -2,6 +2,7 @@
 
 Accuracy is reported on the held-out test photos only (never trained on).
 """
+import os
 import random
 import sys
 import time
@@ -10,10 +11,12 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
-from model import CRNN
+from model import load_reader
 from train import SynthStream, collate, evaluate
 
 STEPS = int(sys.argv[1]) if len(sys.argv) > 1 else 6000
+INIT = sys.argv[2] if len(sys.argv) > 2 else "reader.pt"
+OUT = sys.argv[3] if len(sys.argv) > 3 else "reader_ft.pt"
 BATCH, REAL_PER_BATCH = 128, 40
 
 
@@ -41,8 +44,10 @@ def as_list(batch):
 
 
 def report(model, dev, d, label):
-    for kind in ["printed", "hand"]:
+    for kind in ["printed", "hand", "label"]:
         m = (d["kind"] == kind) & d["test"]
+        if not m.any():
+            continue
         acc, _ = evaluate(model, dev, d["x"][m], d["y"][m])
         print(f"  {label} test {kind:7}: {acc:.1%} of {m.sum()}", flush=True)
 
@@ -50,9 +55,14 @@ def report(model, dev, d, label):
 def main():
     dev = "mps" if torch.backends.mps.is_available() else "cpu"
     d = dict(np.load("realset.npz"))  # load into memory once (an NpzFile re-reads the file on every access)
+    lab = {"x": np.zeros((0, 32, 128), np.float32), "y": np.array([], str), "test": np.array([], bool)}
+    if os.path.exists("labelcells.npz"):  # optional: real label-column cells (ANS / A / B / C / blank)
+        lab = dict(np.load("labelcells.npz"))
+    d = {"x": np.concatenate([d["x"], lab["x"]]), "y": np.concatenate([d["y"], lab["y"]]),
+         "kind": np.concatenate([d["kind"], np.full(len(lab["y"]), "label")]),
+         "test": np.concatenate([d["test"], lab["test"]])}
     train_idx = np.where(~d["test"])[0]
-    model = CRNN().to(dev)
-    model.load_state_dict(torch.load("reader.pt", map_location=dev))
+    model = load_reader(INIT, dev)
     report(model, dev, d, "before")
 
     opt = torch.optim.AdamW(model.parameters(), lr=5e-4, weight_decay=1e-4)
@@ -73,7 +83,7 @@ def main():
             print(f"step {step} loss {loss.item():.3f} ({time.time() - t0:.0f}s)", flush=True)
         if step >= STEPS:
             break
-    torch.save(model.state_dict(), "reader_ft.pt")
+    torch.save(model.state_dict(), OUT)
     report(model, dev, d, "after")
 
 

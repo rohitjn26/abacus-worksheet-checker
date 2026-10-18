@@ -7,7 +7,7 @@ content: walking up from the ANS row, a row is a number row while most of its ce
 import re
 import cv2
 import numpy as np
-from grid import angled_open, binarize, line_masks, ocr
+from grid import angled_open, binarize, line_masks
 
 NUMBER = re.compile(r"^[x×*÷/+\-]?-?\d+(\.\d+)?$")
 
@@ -71,17 +71,8 @@ def clean_crop(table, lines_mask, x0, x1, y0, y1, pad_y=0, pad_bottom=None):
     return cv2.inpaint(gray, mask, 3, cv2.INPAINT_TELEA)
 
 
-def read_printed(cell):
-    """OCR one printed cell. Returns normalised text ('' if empty)."""
-    big = cv2.resize(cv2.cvtColor(cell, cv2.COLOR_GRAY2BGR), None, fx=3, fy=3, interpolation=cv2.INTER_CUBIC)
-    big = cv2.copyMakeBorder(big, 40, 40, 40, 40, cv2.BORDER_CONSTANT, value=(255, 255, 255))
-    text = "".join(t for t, _, _ in ocr(big)).replace(" ", "")
-    return text.translate(str.maketrans({"−": "-", "–": "-", "—": "-", "X": "×", "x": "×", "*": "×"}))
-
-
-def split_table(table, xs, read=None):
-    """read(cell) -> text for a printed cell; defaults to Apple Vision OCR."""
-    read = read or read_printed
+def table_rows(table, xs):
+    """Row lines per column, the row pitch, and a mask of the grid lines (for painting them out)."""
     gray = cv2.cvtColor(table, cv2.COLOR_BGR2GRAY)
     col_w = float(np.median(np.diff(xs)))
     # Row lines may tilt (page curl); strokes longer than 0.4 column width are grid lines, not digits.
@@ -96,14 +87,21 @@ def split_table(table, xs, read=None):
     # Mask only true grid lines for painting out: longer than any digit stroke (a '1' is < 1 row tall).
     _, v_long = line_masks(gray, vlen=pitch * 1.6)
     lines = cv2.dilate(horiz | v_long, np.ones((3, 3), np.uint8))
+    return col_ys, pitch, lines
 
-    # Label column: find the first 'ANS' cell.
-    label_ys = col_ys[0]
-    ans_y = None
-    for a, b in zip(label_ys, label_ys[1:]):
-        if "ANS" in " ".join(t for t, _, _ in ocr(table[a:b, xs[0] : xs[1]])).upper():
-            ans_y = a
-            break
+
+def label_cells(table, xs, col_ys, lines):
+    """(top y, crop) for each cell of the label column (A / blank / ANS / ANS ...)."""
+    ys = col_ys[0]
+    return [(a, clean_crop(table, lines, xs[0], xs[1], a, b)) for a, b in zip(ys, ys[1:])]
+
+
+def split_table(table, xs, read, is_ans):
+    """read(cell) -> text of a printed cell; is_ans(cell) -> True if a label cell says 'ANS'."""
+    col_ys, pitch, lines = table_rows(table, xs)
+
+    # Label column: the first 'ANS' cell from the top.
+    ans_y = next((a for a, cell in label_cells(table, xs, col_ys, lines) if is_ans(cell)), None)
     if ans_y is None:
         raise ValueError("no ANS row found in label column")
 

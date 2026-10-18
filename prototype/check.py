@@ -9,9 +9,9 @@ from pathlib import Path
 import cv2
 import numpy as np
 import torch
-from cells import split_table
+from cells import label_cells, split_table, table_rows
 from grid import find_tables, fix_orientation, grid_lines
-from model import CRNN, decode
+from model import decode, load_reader
 from norm import normalize
 from model import string_logprob
 from policy import decide
@@ -21,10 +21,13 @@ CELL = re.compile(r"^([×÷+]?)(-?\d+(?:\.\d+)?)$")
 
 
 class Reader:
-    def __init__(self, weights="reader_ft.pt"):
-        self.model = CRNN()
-        self.model.load_state_dict(torch.load(weights, map_location="cpu"))
+    def __init__(self, weights="reader_v2.pt"):
+        self.model = load_reader(weights)
         self.model.eval()
+
+    def is_ans(self, cell):
+        text, conf = self(cell if isinstance(cell, list) else [cell], printed=True)[0]
+        return text == "ANS" and conf >= 0.5
 
     def log_probs(self, crops, printed=False):
         x = torch.from_numpy(np.stack([normalize(c, printed) for c in crops]))[:, None]
@@ -85,11 +88,30 @@ def judge(lp, correct):
     return decide(read, conf, fmt(correct), alt), ans, conf
 
 
-def check_table(table, reader):
-    table, xs = grid_lines(table)
-    if len(xs) < 4:
-        raise ValueError("no column grid")
-    qs = split_table(table, xs, read=lambda cell: reader([cell], printed=True)[0][0])
+def has_ans(table, xs, reader):
+    try:
+        col_ys, _, lines = table_rows(table, xs)
+    except ValueError:
+        return False
+    return any(reader.is_ans(cell) for _, cell in label_cells(table, xs, col_ys, lines))
+
+
+def worksheet_tables(img, reader):
+    """Straightened worksheet tables (table, xs), top to bottom, with the photo the right way up.
+
+    The photo is upright when the label column's 'ANS' can be read; otherwise it is turned 180°.
+    Tables without an 'ANS' label (book edge, title box) are dropped."""
+    img = fix_orientation(img)
+    for cand in [img, np.ascontiguousarray(np.rot90(img, 2))]:
+        tables = [g for g in (grid_lines(t) for t in find_tables(cand)) if len(g[1]) >= 4]
+        found = [(t, xs) for t, xs in tables if has_ans(t, xs, reader)]
+        if found:
+            return found
+    return []
+
+
+def check_table(table, xs, reader):
+    qs = split_table(table, xs, read=lambda cell: reader([cell], printed=True)[0][0], is_ans=reader.is_ans)
     kinds = ["tight", "rows", "above"] if WIDE_CROPS else ["tight"]
     lps = {k: reader.log_probs([q["answer_crops"][k] for q in qs]) for k in kinds}
     results = []
@@ -163,12 +185,10 @@ def check_photo(path, reader):
     img = cv2.imread(str(path))
     if SCAN_LOOK:
         img = scan_look(img)
-    img = fix_orientation(img)
-    tables = find_tables(img)
     all_results, panels = [], []
-    for ti, t in enumerate(tables):
+    for ti, (t, xs) in enumerate(worksheet_tables(img, reader)):
         try:
-            res = check_table(t, reader)
+            res = check_table(t, xs, reader)
         except ValueError:  # not a worksheet table (e.g. book edge), or no ANS row found
             continue
         for r in res:

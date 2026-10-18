@@ -1,39 +1,14 @@
 """Find worksheet tables in a photo, straighten them, and locate their grid lines."""
-import re
 import cv2
 import numpy as np
-from PIL import Image
-from ocrmac.ocrmac import OCR
-
-
-def ocr(img_bgr, level="accurate"):
-    """Apple Vision OCR (stand-in for ML Kit on the phone). Returns [(text, conf, (x, y, w, h) in px)]."""
-    pil = Image.fromarray(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-    h, w = img_bgr.shape[:2]
-    out = []
-    for text, conf, (bx, by, bw, bh) in OCR(pil, recognition_level=level).recognize():
-        # Vision boxes are normalised with origin at bottom-left.
-        out.append((text, conf, (bx * w, (1 - by - bh) * h, bw * w, bh * h)))
-    return out
 
 
 def fix_orientation(img):
-    """Rotate so tables are upright.
-
-    Step 1: tables are wider than tall, so long table lines should run horizontally.
-    Step 2: between the upright candidate and its 180° flip, keep the one where OCR finds
-    more real tokens (numbers, 'ANS'), since upside-down text reads as junk.
-    """
+    """Turn the photo so table lines run mainly horizontally (tables are wider than tall).
+    Upright vs upside down is settled later by finding the 'ANS' label (see check.worksheet_tables)."""
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     horiz, vert = line_masks(gray)
-    if vert.sum() > horiz.sum():
-        img = np.ascontiguousarray(np.rot90(img))
-
-    def score(cand):
-        return sum(c for t, c, _ in ocr(cand) if re.fullmatch(r"-?\d+|ANS|[IVX]+", t.strip()))
-
-    flipped = np.ascontiguousarray(np.rot90(img, 2))
-    return flipped if score(flipped) > score(img) else img
+    return np.ascontiguousarray(np.rot90(img)) if vert.sum() > horiz.sum() else img
 
 
 def line_masks(gray, hlen=None, vlen=None):

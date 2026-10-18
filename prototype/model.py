@@ -28,6 +28,21 @@ class CRNN(nn.Module):
         return self.fc(f).log_softmax(-1).permute(1, 0, 2)
 
 
+def load_reader(path, device="cpu"):
+    """Load weights; if they predate new alphabet characters, grow the output layer (old classes keep
+    their weights, new ones start untrained)."""
+    model = CRNN()
+    state = torch.load(path, map_location=device)
+    w, b = state["fc.weight"], state["fc.bias"]
+    if w.shape[0] < model.fc.out_features:
+        new_w, new_b = model.fc.weight.data.clone(), model.fc.bias.data.clone()
+        new_w[: w.shape[0]], new_b[: b.shape[0]] = w, b
+        new_b[b.shape[0]:] = b.min()  # new characters start unlikely
+        state["fc.weight"], state["fc.bias"] = new_w, new_b
+    model.load_state_dict(state)
+    return model.to(device)
+
+
 def string_logprob(log_probs, texts):
     """log P(text | image) under CTC (summed over all alignments), per column of log_probs (T, B, C)."""
     tg = [torch.tensor([ALPHABET.index(c) + 1 for c in t], dtype=torch.long) for t in texts]

@@ -31,11 +31,10 @@ def decide(read, conf, correct, alt_ratio):
 if __name__ == "__main__":
     import sys
     from decimal import Decimal
-    from model import CRNN, decode
+    from model import decode, load_reader
     from check import evaluate, fmt
 
-    model = CRNN()
-    model.load_state_dict(torch.load(sys.argv[1] if len(sys.argv) > 1 else "reader_ft.pt", map_location="cpu"))
+    model = load_reader(sys.argv[1] if len(sys.argv) > 1 else "reader_v2.pt")
     model.eval()
     d = np.load("realset.npz")
     truth = json.load(open("testset.json"))

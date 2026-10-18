@@ -5,7 +5,6 @@ Photos are split into train / test by photo, so test photos are never seen in tr
 import json
 import cv2
 import numpy as np
-from grid import fix_orientation, find_tables, grid_lines
 from cells import split_table
 from norm import normalize
 
@@ -23,18 +22,19 @@ def has_ink(cell):
 
 def load(path="testset.json", root=".."):
     """Returns list of (normalized_cell, label, kind, photo, tag); kind is 'printed' or 'hand'."""
+    from check import Reader, worksheet_tables  # imported here: check.py is the heavier module
+    reader = Reader()
     truth = json.load(open(path))
     out = []
     for fname, tables in truth.items():
         if fname.startswith("_"):
             continue
-        img = fix_orientation(cv2.imread(f"{root}/{fname}"))
-        found = [g for g in (grid_lines(t) for t in find_tables(img)) if len(g[1]) >= 11]
+        found = [g for g in worksheet_tables(cv2.imread(f"{root}/{fname}"), reader) if len(g[1]) >= 11]
         if len(found) != len(tables):
             print(f"  ! {fname}: found {len(found)} tables, truth has {len(tables)} - skipped")
             continue
         for ti, ((t, xs), gt) in enumerate(zip(found, tables)):
-            qs = split_table(t, xs, read=has_ink)  # keep every inked row; align to truth from the bottom
+            qs = split_table(t, xs, read=has_ink, is_ans=reader.is_ans)  # keep every inked row; align to truth from the bottom
             for qi, (q, nums, ans) in enumerate(zip(qs, gt["numbers"], gt["answers"])):
                 tag = f"{fname[-14:-5]} T{ti + 1} Q{qi + 1}"
                 cells = q["numbers"][-len(nums):]

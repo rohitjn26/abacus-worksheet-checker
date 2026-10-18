@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 
 H, W = 32, 128
-ALPHABET = "0123456789-.×÷+IVX"  # IVX = printed column headers. CTC blank is index 0, so char i -> i + 1
+ALPHABET = "0123456789-.×÷+IVXANSBC"  # IVX = column headers, ANS/A/B/C = label column. CTC blank is index 0, so char i -> i + 1
 
 
 def remove_lines(ink):

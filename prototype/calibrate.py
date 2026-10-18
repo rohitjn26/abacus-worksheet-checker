@@ -5,11 +5,10 @@ usage: python calibrate.py [weights]   (reports on the held-out test photos)
 import sys
 import numpy as np
 import torch
-from model import CRNN, decode
+from model import decode, load_reader
 
-weights = sys.argv[1] if len(sys.argv) > 1 else "reader_ft.pt"
-model = CRNN()
-model.load_state_dict(torch.load(weights, map_location="cpu"))
+weights = sys.argv[1] if len(sys.argv) > 1 else "reader_v2.pt"
+model = load_reader(weights)
 model.eval()
 d = np.load("realset.npz")
 
