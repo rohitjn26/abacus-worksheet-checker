@@ -12,7 +12,8 @@ import torch
 from cells import label_cells, split_table, table_rows
 from grid import find_tables, fix_orientation, grid_lines
 from model import decode, load_reader
-from norm import normalize
+from hand_reader import HandReader
+from norm import ALPHABET, normalize
 from model import string_logprob
 from policy import decide
 
@@ -20,10 +21,21 @@ PRINTED_MIN_CONF = 0.90   # below this, a printed number is not trusted -> teach
 CELL = re.compile(r"^([×÷+]?)(-?\d+(?:\.\d+)?)$")
 
 
+HAND_READER = "paddle"  # "paddle": PaddleOCR (frozen) + trained head for answers; "own": our model
+
+
 class Reader:
-    def __init__(self, weights="reader_v2.pt"):
+    def __init__(self, weights="reader_v2.pt", hand=None):
         self.model = load_reader(weights)
         self.model.eval()
+        hand = hand or HAND_READER
+        self.hand = HandReader() if hand == "paddle" else None
+
+    def answer_log_probs(self, crops):
+        """(log-probs, alphabet) for handwritten answer crops."""
+        if self.hand:
+            return self.hand.log_probs(crops), self.hand.alphabet
+        return self.log_probs(crops), ALPHABET
 
     def is_ans(self, cell):
         text, conf = self(cell if isinstance(cell, list) else [cell], printed=True)[0]
@@ -75,16 +87,16 @@ ABSENT_MAX = 1e-5  # if even the best crop gives "child wrote exactly the correc
 WIDE_CROPS = True  # if the tight crop is unclear, also try both ANS rows / both rows + the strip above
 
 
-def judge(lp, correct):
+def judge(lp, correct, alphabet):
     """Read one answer from its log-probs and decide right / wrong / review against the correct answer."""
-    (ans, conf), = decode(lp)
+    (ans, conf), = decode(lp, alphabet)
     given = as_number(ans)
     if not ans:
         return "blank", ans, conf
     if given is None:
         return "review", ans, conf
     read = fmt(given)
-    alt = (string_logprob(lp, [fmt(correct)]) - string_logprob(lp, [ans])).exp().item()
+    alt = (string_logprob(lp, [fmt(correct)], alphabet) - string_logprob(lp, [ans], alphabet)).exp().item()
     return decide(read, conf, fmt(correct), alt), ans, conf
 
 
@@ -113,14 +125,16 @@ def worksheet_tables(img, reader):
 def check_table(table, xs, reader):
     qs = split_table(table, xs, read=lambda cell: reader([cell], printed=True)[0][0], is_ans=reader.is_ans)
     kinds = ["tight", "rows", "above"] if WIDE_CROPS else ["tight"]
-    lps = {k: reader.log_probs([q["answer_crops"][k] for q in qs]) for k in kinds}
+    lps, abc = {}, None
+    for k in kinds:
+        lps[k], abc = reader.answer_log_probs([q["answer_crops"][k] for q in qs])
     results = []
     for i, q in enumerate(qs):
         nums = [t for _, t in q["numbers"]]
         p_conf = min((conf for _, conf in reader([c for c, _ in q["numbers"]], printed=True)), default=0)
         correct = evaluate(nums)
         r = {"q": i + 1, "numbers": nums, "correct": correct, "box": q["answer_box"]}
-        (ans, conf), = decode(lps["tight"][:, i : i + 1])
+        (ans, conf), = decode(lps["tight"][:, i : i + 1], abc)
         r["given"], r["conf"] = ans, conf
         if correct is None or p_conf < PRINTED_MIN_CONF:
             r["status"], r["why"] = ("blank", "") if not ans else ("review", "couldn't read the printed numbers")
@@ -128,9 +142,9 @@ def check_table(table, xs, reader):
                 r["why"] = r["why"] or "couldn't read the printed numbers"
             results.append(r)
             continue
-        verdicts = {k: judge(lps[k][:, i : i + 1], correct) for k in kinds}
+        verdicts = {k: judge(lps[k][:, i : i + 1], correct, abc) for k in kinds}
         status, ans, conf = verdicts["tight"]
-        p_correct = max(string_logprob(lps[k][:, i : i + 1], [fmt(correct)]).exp().item() for k in kinds)
+        p_correct = max(string_logprob(lps[k][:, i : i + 1], [fmt(correct)], abc).exp().item() for k in kinds)
         if status == "review" and ans and p_correct < ABSENT_MAX:
             status = "wrong"  # whatever exactly the child wrote, it is not the correct answer
         if status == "review" and len(kinds) > 1:
@@ -138,6 +152,8 @@ def check_table(table, xs, reader):
             best = max(kinds, key=lambda k: verdicts[k][2])
             status, ans, conf = verdicts[best]
             r["crop"] = best
+        if status == "blank" and normalize(q["answer"]).max() > 0:
+            status = "review"  # the reader saw nothing, but there is ink in the answer cell
         r["status"], r["given"], r["conf"] = status, ans, conf
         if status == "review":
             r["why"] = f"handwriting unclear (best guess {ans})"

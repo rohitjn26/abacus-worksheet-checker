@@ -21,7 +21,7 @@ def has_ink(cell):
 
 
 def load(path="testset.json", root=".."):
-    """Returns list of (normalized_cell, label, kind, photo, tag); kind is 'printed' or 'hand'."""
+    """Returns list of (normalized_cell, label, kind, photo, tag, raw_crop); kind is 'printed' or 'hand'."""
     from check import Reader, worksheet_tables  # imported here: check.py is the heavier module
     reader = Reader()
     truth = json.load(open(path))
@@ -40,9 +40,9 @@ def load(path="testset.json", root=".."):
                 cells = q["numbers"][-len(nums):]
                 for ri, ((cell, _), n) in enumerate(zip(cells, nums)):
                     if n != "?":
-                        out.append((normalize(cell), str(n), "printed", fname, f"{tag} r{ri + 1}"))
+                        out.append((normalize(cell), str(n), "printed", fname, f"{tag} r{ri + 1}", cell))
                 if ans != "?":
-                    out.append((normalize(q["answer"]), ans, "hand", fname, tag))
+                    out.append((normalize(q["answer"]), ans, "hand", fname, tag, q["answer"]))
     return out
 
 

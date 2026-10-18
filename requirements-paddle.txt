@@ -1,0 +1,5 @@
+# Separate Python 3.12 environment, only to re-create the PaddleOCR ONNX file / head features (paddle_exp/)
+paddlepaddle==3.3.1
+paddleocr==3.7.0
+paddle2onnx==2.1.0
+onnxruntime==1.31.0

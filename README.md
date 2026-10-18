@@ -9,9 +9,14 @@ answer in the ANS row) and marks every answer right, wrong, or "please check". R
    (camera tilt and curved book pages are handled by tracing each column line). The photo counts as
    upright when the model can read the `ANS` label; otherwise it is turned 180°.
 2. **Cut out cells**: the printed numbers in each column and the child's answer in the ANS row.
-3. **Read every cell** with one small model (CRNN + CTC, ~1.4M parameters) that reads both printed
-   numbers and handwriting: digits, `-`, `.`, `×`, `÷`, plus `I V X` (column headers) and
-   `A N S B C` (label column). No other OCR is used, so the same model can run on Android / iOS.
+3. **Read every cell**:
+   - printed numbers, column headers (`I V X`) and the label column (`A N S B C`): our own small model
+     (CRNN + CTC, ~1.4M parameters, 5 MB)
+   - the child's handwritten answer: PaddleOCR's PP-OCRv5 mobile recognizer with its pretrained layers
+     frozen (run via ONNX, 22 MB) plus a small head trained on our cells. Pretraining on millions of
+     real text images reads children's handwriting better than our model (held-out cells: ~88% vs 81%).
+
+   Both run with ONNX / PyTorch only, so the pipeline can move to Android / iOS.
 4. **Work out the correct answer** in code, top to bottom (`+`, `−`, `×`, `÷`, decimals).
 5. **Decide**:
    - reading matches the correct answer → right
@@ -47,14 +52,29 @@ Marked sheets are written to `prototype/results/`:
 | `realset.py`, `finetune.py` | Real labelled cells and fine-tuning |
 | `calibrate.py`, `e2e.py` | Accuracy measurement on held-out photos |
 | `testset.json` | Hand transcription of the sample worksheets |
-| `reader_v2.pt` | Model weights used by the checker |
+| `reader_v2.pt` | Our model: printed numbers, headers, ANS label |
+| `hand_reader.py`, `hand_head.pt`, `ppocrv5_mobile_frozen.onnx` | Handwriting reader: frozen PaddleOCR + trained head |
+| `train_hand_head.py` | Trains the handwriting head on frozen PaddleOCR features |
 | `reader.pt`, `reader_ft.pt` | Earlier weights (synthetic-only, first fine-tune), kept as training starting points |
 
 Worksheet photos are not included in this repo (they contain children's handwriting).
 `realset.py`, `finetune.py` and `e2e.py` expect them next to the `prototype/` folder.
 
+## PaddleOCR experiment (`paddle_exp/`)
+
+Scripts used to compare and build the handwriting reader (Python 3.12, `requirements-paddle.txt`):
+`zeroshot.py` (PaddleOCR as-is), `extract_feats.py` (frozen features), `train_last_layer.py`
+(last-layer comparison), `export_onnx.py` (frozen part to ONNX). Data, the cloned PaddleOCR repo and
+weights are not committed.
+
+## Third-party
+
+PP-OCRv5 mobile recognizer weights © PaddlePaddle Authors, Apache License 2.0
+(https://github.com/PaddlePaddle/PaddleOCR). `prototype/ppocrv5_mobile_frozen.onnx` is a converted
+subset of those weights.
+
 ## Status
 
-Prototype. On held-out photos: printed numbers 99%+ read correctly; ~81% of answers checked
+Prototype. On held-out photos: printed numbers 99%+ read correctly; ~88% of answers checked
 automatically, the rest sent to the teacher; no answer mis-marked so far. More handwriting samples
 from different children are the main way to improve it.

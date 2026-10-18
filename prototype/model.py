@@ -43,9 +43,9 @@ def load_reader(path, device="cpu"):
     return model.to(device)
 
 
-def string_logprob(log_probs, texts):
+def string_logprob(log_probs, texts, alphabet=ALPHABET):
     """log P(text | image) under CTC (summed over all alignments), per column of log_probs (T, B, C)."""
-    tg = [torch.tensor([ALPHABET.index(c) + 1 for c in t], dtype=torch.long) for t in texts]
+    tg = [torch.tensor([alphabet.index(c) + 1 for c in t], dtype=torch.long) for t in texts]
     ln = torch.tensor([len(t) for t in tg])
     T, B, _ = log_probs.shape
     flat = torch.cat(tg) if ln.sum() else torch.zeros(0, dtype=torch.long)
@@ -53,7 +53,7 @@ def string_logprob(log_probs, texts):
                        reduction="none", zero_infinity=True)
 
 
-def decode(log_probs):
+def decode(log_probs, alphabet=ALPHABET):
     """Greedy CTC decode. Returns [(text, confidence)], confidence = P(text | image) over all alignments
     (a character's edges wavering between it and 'blank' does not count as doubt)."""
     idx = log_probs.argmax(-1)  # (T, B)
@@ -62,8 +62,8 @@ def decode(log_probs):
         text, prev = "", 0
         for k in idx[:, b].tolist():
             if k != 0 and k != prev:
-                text += ALPHABET[k - 1]
+                text += alphabet[k - 1]
             prev = k
         texts.append(text)
-    conf = string_logprob(log_probs, texts).exp().tolist()
+    conf = string_logprob(log_probs, texts, alphabet).exp().tolist()
     return list(zip(texts, conf))

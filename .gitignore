@@ -16,3 +16,7 @@ prototype/realset.npz
 
 .DS_Store
 prototype/labelcells.npz
+.venv-paddle/
+# PaddleOCR experiment: keep the scripts, not the data, models or cloned repo
+paddle_exp/*
+!paddle_exp/*.py
