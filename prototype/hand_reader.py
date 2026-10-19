@@ -4,6 +4,8 @@ PaddleOCR's pretrained layers turn a cell image into 40 x 120 features; only the
 was trained on our cells. Same interface as check.Reader.log_probs: CTC log-probs (T, B, C).
 PP-OCRv5 weights: Apache-2.0, https://github.com/PaddlePaddle/PaddleOCR
 """
+import json
+import os
 import cv2
 import numpy as np
 import onnxruntime as ort
@@ -43,6 +45,9 @@ class HandReader:
         self.head = HandHead(len(alphabet), layers=2 if "rnn.weight_ih_l1" in state else 1)
         self.head.load_state_dict(state)
         self.head.eval()
+        # Confidence calibration (calibrate_head.py): logits are divided by this temperature.
+        cal = os.path.splitext(head_path)[0] + ".json"
+        self.temperature = json.load(open(cal))["temperature"] if os.path.exists(cal) else 1.0
 
     def features(self, crops):
         return self.session.run(None, {"x": np.stack([prep(c) for c in crops])})[0]
@@ -50,4 +55,5 @@ class HandReader:
     def log_probs(self, crops):
         with torch.no_grad():
             logits = self.head(torch.from_numpy(self.features(crops)))
-        return logits.log_softmax(-1).permute(1, 0, 2)  # (T, B, C)
+        return (logits / self.temperature).log_softmax(-1).permute(1, 0, 2)  # (T, B, C)
+

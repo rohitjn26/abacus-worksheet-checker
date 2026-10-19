@@ -21,6 +21,16 @@ TEST_PHOTOS = [  # held out: never used for training (re-shots of a held-out pag
     "19022026/WhatsApp Image 2026-10-19 at 14.42.09 (2).jpeg",
 ]
 
+CALIB_PHOTOS = [  # kept out of training too: used only to calibrate confidence (never the test photos)
+    "WhatsApp Image 2026-10-16 at 22.37.56 (1).jpeg",
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.07 (1).jpeg",
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.09 (3).jpeg",
+]
+
+
+def split_of(photo):
+    return "test" if photo in TEST_PHOTOS else "calib" if photo in CALIB_PHOTOS else "train"
+
 
 def has_ink(cell):
     return "1" if normalize(cell).max() > 0 else ""

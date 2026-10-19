@@ -12,7 +12,7 @@ import cv2
 import numpy as np
 from check import Reader
 from degrade_test import blur, dark, glare, jpeg, low_light, shadow, shake, small
-from realset import TEST_PHOTOS, cells_from_image
+from realset import CALIB_PHOTOS, TEST_PHOTOS, cells_from_image
 
 rng = np.random.default_rng(1)
 
@@ -50,7 +50,8 @@ def bad_photo(img):
 if __name__ == "__main__":
     n_var, raw_dir = int(sys.argv[1]), Path(sys.argv[2])
     (raw_dir / "aug").mkdir(parents=True, exist_ok=True)
-    truth = {k: v for k, v in json.load(open("testset.json")).items() if not k.startswith("_") and k not in TEST_PHOTOS}
+    truth = {k: v for k, v in json.load(open("testset.json")).items()
+             if not k.startswith("_") and k not in TEST_PHOTOS and k not in CALIB_PHOTOS}
     reader = Reader()
     data, kept, lines = [], 0, []
     for f, tables in truth.items():
@@ -61,7 +62,7 @@ if __name__ == "__main__":
             for x, label, kind, _, tag, raw in cells:
                 name = f"aug/{len(data):06d}.png"
                 cv2.imwrite(str(raw_dir / name), raw)
-                lines.append(f"{name}\t{label}\t{kind}")
+                lines.append(f"{name}\t{label}\t{kind}\t{f}")
                 data.append((x, label, kind))
         print(f"{f[-14:-5]}: done", flush=True)
     (raw_dir / "aug.txt").write_text("\n".join(lines) + "\n")

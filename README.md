@@ -101,6 +101,10 @@ On the held-out photos: printed numbers 99%+ read correctly; ~88% of answers che
 rest sent to the teacher; no answer mis-marked so far, including on artificially degraded versions of
 those photos that pass the quality check.
 
-Next: calibrate the confidence of a stronger handwriting head (more accurate, but over-confident as
-trained: 94% checked automatically yet 4 wrong marks) on photos kept apart from both training and test. More handwriting samples
+Calibration (`calibrate_head.py`): three training photos are kept apart (`CALIB_PHOTOS` in `realset.py`)
+to tune a temperature that makes the handwriting head's confidence honest. A stronger head trained this
+way checks 91% of held-out answers automatically but still made one wrong mark (a very faint "14" read
+as "4"), so the default stays the earlier head (88%, no wrong marks). With more sheets - in particular a
+larger calibration set - re-run: `build_hand_feats.py`, `augment_photos.py`, `train_hand_head.py`,
+`calibrate_head.py`, then `compare_models.py --calib` and finally `compare_models.py`. More handwriting samples
 from different children are the main way to improve it.
