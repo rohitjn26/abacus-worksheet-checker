@@ -20,7 +20,7 @@ def score(fname, tables, results, c, verbose=True):
     for t_idx, gt in zip(got_tables, tables):
         res = [r for r in results if r["table"] == t_idx]
         for r, nums, written in zip(res, gt["numbers"], gt["answers"]):
-            if written == "?" or "?" in nums:
+            if written in ("?", "") or "?" in nums:
                 continue
             correct = fmt(evaluate([str(n) for n in nums]))
             child = "child right" if written == correct else "child wrong"

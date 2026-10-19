@@ -23,7 +23,7 @@ CELL = re.compile(r"^([×÷+]?)(-?\d+(?:\.\d+)?)$")
 
 
 HAND_READER = "paddle"  # "paddle": PaddleOCR (frozen) + trained head for answers; "own": our model
-READER_WEIGHTS = "reader_v3.pt"   # our model (printed numbers, headers, ANS)
+READER_WEIGHTS = "reader_v4.pt"   # our model (printed numbers, headers, ANS)
 HAND_HEAD = "hand_head_v2.pt"     # head on frozen PaddleOCR for handwritten answers
 PRINTED_READER = "own"  # "own": our model for printed numbers / headers / ANS; "paddle": PaddleOCR + full head
 
@@ -116,7 +116,7 @@ def has_ans(table, xs, reader):
     return any(reader.is_ans(cell) for _, cell in label_cells(table, xs, col_ys, lines))
 
 
-def worksheet_tables(img, reader):
+def worksheet_tables(img, reader, report=None):
     """Straightened worksheet tables (table, xs), top to bottom, with the photo the right way up.
 
     The photo is upright when the label column's 'ANS' can be read; otherwise it is turned 180°.
@@ -126,8 +126,28 @@ def worksheet_tables(img, reader):
         tables = [g for g in (grid_lines(t) for t in find_tables(cand)) if len(g[1]) >= 4]
         found = [(t, xs) for t, xs in tables if has_ans(t, xs, reader)]
         if found:
+            # A full worksheet-like grid whose 'ANS' could not be read is a table we are skipping: say so.
+            missed = sum(1 for t, xs in tables if len(xs) >= 10 and not any(t is f for f, _ in found))
+            if report is not None and missed:
+                report["unread_tables"] = report.get("unread_tables", 0) + missed
             return found
     return []
+
+
+def short_numbers(qs):
+    """Questions with a printed number that has fewer digits than nearly all others in its row - a sign
+    that part of it was cut off (e.g. at a curled page edge). Rows are aligned from the bottom."""
+    flagged = set()
+    depth = max((len(q["numbers"]) for q in qs), default=0)
+    for r in range(1, depth + 1):
+        row = [(i, q["numbers"][-r][1]) for i, q in enumerate(qs) if len(q["numbers"]) >= r]
+        digits = [sum(ch.isdigit() for ch in t) for _, t in row]
+        if not digits:
+            continue
+        common = max(set(digits), key=digits.count)
+        if common >= 2 and digits.count(common) >= 0.8 * len(digits):
+            flagged |= {i for (i, _), d in zip(row, digits) if d < common}
+    return flagged
 
 
 def check_table(table, xs, reader):
@@ -136,6 +156,7 @@ def check_table(table, xs, reader):
     lps, abc = {}, None
     for k in kinds:
         lps[k], abc = reader.answer_log_probs([q["answer_crops"][k] for q in qs])
+    short = short_numbers(qs)
     results = []
     for i, q in enumerate(qs):
         nums = [t for _, t in q["numbers"]]
@@ -145,7 +166,7 @@ def check_table(table, xs, reader):
              "col_w": float(np.median(np.diff(xs)))}
         (ans, conf), = decode(lps["tight"][:, i : i + 1], abc)
         r["given"], r["conf"] = ans, conf
-        if q["missing_number"] and ans:
+        if (q["missing_number"] or i in short) and ans:
             # Other columns have a number in a row where this one came out blank: a printed number was lost.
             r["status"], r["why"] = "review", "couldn't read the printed numbers"
             results.append(r)
@@ -218,7 +239,7 @@ def check_photo(path, reader, report=None):
     if SCAN_LOOK:
         img = scan_look(img)
     all_results, panels = [], []
-    for ti, (t, xs) in enumerate(worksheet_tables(img, reader)):
+    for ti, (t, xs) in enumerate(worksheet_tables(img, reader, report)):
         try:
             res = check_table(t, xs, reader)
         except ValueError:  # a worksheet table (it has 'ANS') whose rows/columns could not be lined up

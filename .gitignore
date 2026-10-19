@@ -22,3 +22,4 @@ paddle_exp/*
 !paddle_exp/*.py
 prototype/augset.npz
 prototype/degrade_results*.json
+prototype/results_new/

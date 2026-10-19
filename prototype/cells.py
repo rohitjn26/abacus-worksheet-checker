@@ -62,6 +62,19 @@ def answer_crops(table, lines, x0, x1, ys, j, pitch):
     return {"tight": tight, "rows": rows, "above": above}
 
 
+def extend_to_edges(ys, pitch, height):
+    """Row lines lost at the very top / bottom of the crop (border cut off or faint): if most of a row's
+    height of table remains beyond the last line found, add lines at the normal row spacing."""
+    if not ys:
+        return ys
+    ys = list(ys)
+    while height - 1 - ys[-1] > 0.7 * pitch:
+        ys.append(min(int(round(ys[-1] + pitch)), height - 1))
+    while ys[0] > 0.7 * pitch:
+        ys.insert(0, max(int(round(ys[0] - pitch)), 0))
+    return ys
+
+
 def clean_crop(table, lines_mask, x0, x1, y0, y1, pad_y=0, pad_bottom=None):
     """Grey crop of a cell with its grid lines inpainted from the surrounding paper."""
     H = table.shape[0]
@@ -82,7 +95,7 @@ def table_rows(table, xs):
     if not gaps:
         raise ValueError("no row lines found")
     pitch = float(np.median(gaps))
-    col_ys = [fill_gaps(ys, pitch) for ys in col_ys]
+    col_ys = [extend_to_edges(fill_gaps(ys, pitch), pitch, table.shape[0]) for ys in col_ys]
 
     # Mask only true grid lines for painting out: longer than any digit stroke (a '1' is < 1 row tall).
     _, v_long = line_masks(gray, vlen=pitch * 1.6)

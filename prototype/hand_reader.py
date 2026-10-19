@@ -14,9 +14,10 @@ HAND_ALPHABET = "0123456789-.×÷+"  # CTC blank is index 0
 
 
 class HandHead(nn.Module):
-    def __init__(self, n_chars=len(HAND_ALPHABET)):
+    def __init__(self, n_chars=len(HAND_ALPHABET), layers=1):
         super().__init__()
-        self.rnn = nn.LSTM(120, 96, bidirectional=True, batch_first=True)
+        self.rnn = nn.LSTM(120, 96, num_layers=layers, bidirectional=True, batch_first=True,
+                           dropout=0.1 if layers > 1 else 0.0)
         self.fc = nn.Linear(192, n_chars + 1)
 
     def forward(self, feats):  # (B, 40, 120) -> logits (B, 40, C)
@@ -38,8 +39,9 @@ class HandReader:
     def __init__(self, onnx_path="ppocrv5_mobile_frozen.onnx", head_path="hand_head.pt", alphabet=HAND_ALPHABET):
         self.alphabet = alphabet
         self.session = ort.InferenceSession(onnx_path)
-        self.head = HandHead(len(alphabet))
-        self.head.load_state_dict(torch.load(head_path, map_location="cpu"))
+        state = torch.load(head_path, map_location="cpu")
+        self.head = HandHead(len(alphabet), layers=2 if "rnn.weight_ih_l1" in state else 1)
+        self.head.load_state_dict(state)
         self.head.eval()
 
     def features(self, crops):

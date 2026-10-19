@@ -98,8 +98,9 @@ class Synth:
             text_r = text.replace("×", random.choice(["×", "x", "X"]))
         else:
             text_r = text
-        if text_r == "ANS" and random.random() < 0.5:
-            text_r = " ".join(text_r)  # the book prints it letter-spaced
+        if text_r == "ANS":
+            # Editions print "ANS", "A N S" (letter-spaced) or "Ans"; all mean the answer row (label stays "ANS").
+            text_r = random.choice(["ANS", "A N S", "Ans", "Ans", "ans"])
         if text_r[:1] in "×÷+x" and random.random() < 0.5:
             text_r = text_r[0] + " " + text_r[1:]
         l, t, r, b = font.getbbox(text_r)

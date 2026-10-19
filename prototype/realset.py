@@ -8,11 +8,17 @@ import numpy as np
 from cells import split_table
 from norm import normalize
 
-TEST_PHOTOS = [  # held out: never used for training
+TEST_PHOTOS = [  # held out: never used for training (re-shots of a held-out page are held out too)
     "WhatsApp Image 2026-10-16 at 15.32.22.jpeg",
     "WhatsApp Image 2026-10-16 at 22.37.55 (2).jpeg",
     "WhatsApp Image 2026-10-16 at 22.37.56 (2).jpeg",
     "WhatsApp Image 2026-10-16 at 22.37.56 (3).jpeg",
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.06.jpeg",      # re-shot of 22.37.56 (3)
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.07 (3).jpeg",  # re-shot of 22.37.55 (2)
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.09 (1).jpeg",  # re-shot of 15.32.22
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.06 (2).jpeg",  # new page, 2-digit numbers
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.08 (2).jpeg",
+    "19022026/WhatsApp Image 2026-10-19 at 14.42.09 (2).jpeg",
 ]
 
 
@@ -46,7 +52,7 @@ def cells_from_image(img, fname, tables, reader, verify=False):
             for ri, ((cell, _), n) in enumerate(zip(cells, nums)):
                 if n != "?":
                     rows.append((normalize(cell), str(n), "printed", fname, f"{tag} r{ri + 1}", cell))
-            if ans != "?":
+            if ans not in ("?", ""):  # "" = left unanswered
                 rows.append((normalize(q["answer"]), ans, "hand", fname, tag, q["answer"]))
         if rows is None or (verify and len(qs) != len(gt["numbers"])):
             continue

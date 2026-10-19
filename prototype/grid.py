@@ -29,6 +29,21 @@ def order_corners(pts):
     return np.array([pts[s.argmin()], pts[d.argmin()], pts[s.argmax()], pts[d.argmax()]], np.float32)
 
 
+def crossing_lines(horiz, vert, min_crossings=3):
+    """Keep only line pieces that cross at least `min_crossings` lines of the other direction.
+    Table lines cross many; a page edge, the book's fold or a stray long stroke cross few."""
+    k = np.ones((3, 3), np.uint8)
+    n_x, x_lab = cv2.connectedComponents(cv2.dilate(horiz, k) & cv2.dilate(vert, k))
+    out = []
+    for mask in (horiz, vert):
+        n, lab = cv2.connectedComponents(cv2.dilate(mask, k))
+        both = (lab > 0) & (x_lab > 0)
+        pairs = np.unique(lab[both].astype(np.int64) * (n_x + 1) + x_lab[both])
+        counts = np.bincount(pairs // (n_x + 1), minlength=n)
+        out.append(np.where(counts[lab] >= min_crossings, mask, 0).astype(np.uint8))
+    return out[0], out[1]
+
+
 def find_tables(img):
     """Return straightened crops of each table, top to bottom.
 
@@ -40,6 +55,7 @@ def find_tables(img):
     bw = binarize(gray)
     horiz = angled_open(bw, max(W // 30, 20), range(-15, 16, 3), vertical=False)
     vert = angled_open(bw, max(H // 30, 15), range(-20, 21, 4), vertical=True)
+    horiz, vert = crossing_lines(horiz, vert)
     grid = cv2.dilate(horiz | vert, np.ones((5, 5), np.uint8))
     contours, _ = cv2.findContours(grid, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
     rects = [(c, cv2.boundingRect(c)) for c in contours if cv2.boundingRect(c)[3] > H * 0.05]
@@ -50,7 +66,10 @@ def find_tables(img):
     for c, (x, y, w, h) in sorted(big, key=lambda cr: cr[1][1]):
         for g in groups:
             gy0, gy1 = g["y"]
-            if min(gy1, y + h) - max(gy0, y) > 0.5 * min(gy1 - gy0, h):
+            x_gap = max(x - g["x"][1], g["x"][0] - (x + w))  # < 0 when they overlap horizontally
+            # Same rows and touching / nearly touching: pieces of one table (a faint outline split it).
+            # Not joined across a real gap, e.g. the facing page's table across the book's fold.
+            if min(gy1, y + h) - max(gy0, y) > 0.5 * min(gy1 - gy0, h) and x_gap < W * 0.02:
                 g["pts"].append(c); g["y"] = (min(gy0, y), max(gy1, y + h)); g["x"] = (min(g["x"][0], x), max(g["x"][1], x + w))
                 break
         else:
@@ -166,10 +185,14 @@ def grid_lines(table):
     h, w = table.shape[:2]
     mids = [f(h / 2) for f in curves]
     m = float(np.median(np.diff(mids)))
+    # The crop's own edge is the table's outer edge (find_tables uses its extreme points), so when about
+    # one column's width remains, the border is at the crop edge - not at a guessed median width, which
+    # can cut off digits where the page curls.
     if w - mids[-1] > 0.6 * m:
-        curves.append(curves[-1] + np.poly1d([min(m, w - 1 - mids[-1])]))
+        rest = w - 1 - mids[-1]
+        curves.append(curves[-1] + np.poly1d([rest if rest < 1.5 * m else m]))
     if mids[0] > 0.6 * m:
-        curves.insert(0, curves[0] - np.poly1d([min(m, mids[0])]))
+        curves.insert(0, curves[0] - np.poly1d([mids[0] if mids[0] < 1.5 * m else m]))
     # Columns are equal width: a gap of ~k columns means k-1 lines were missed (faint, dark or blurred);
     # put them back evenly. Otherwise two columns merge and one child's answer is read with another's.
     filled = curves[:1]
