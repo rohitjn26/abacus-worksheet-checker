@@ -144,48 +144,62 @@ def short_numbers(qs):
 
 def check_table(table, xs, reader):
     qs = split_table(table, xs, read=lambda cell: reader([cell], printed=True)[0][0], is_ans=reader.is_ans)
-    kinds = ["tight", "rows", "above"] if WIDE_CROPS else ["tight"]
-    lps, abc = {}, None
-    for k in kinds:
-        lps[k], abc = reader.answer_log_probs([q["answer_crops"][k] for q in qs])
+    tight, abc = reader.answer_log_probs([q["answer_crops"]["tight"] for q in qs])
     short = short_numbers(qs)
-    results = []
+    results, unclear = [], []
     for i, q in enumerate(qs):
         nums = [t for _, t in q["numbers"]]
         p_conf = min((conf for _, conf in reader([c for c, _ in q["numbers"]], printed=True)), default=0)
         correct = evaluate(nums)
         r = {"q": i + 1, "numbers": nums, "correct": correct, "box": q["answer_box"], "printed_conf": p_conf,
              "col_w": float(np.median(np.diff(xs)))}
-        (ans, conf), = ctc.decode(lps["tight"][:, i : i + 1], abc)
+        (ans, conf), = ctc.decode(tight[:, i : i + 1], abc)
         r["given"], r["conf"] = ans, conf
+        results.append(r)
         if (q["missing_number"] or i in short) and ans:
             # Other columns have a number in a row where this one came out blank: a printed number was lost.
             r["status"], r["why"] = "review", "couldn't read the printed numbers"
-            results.append(r)
             continue
         if correct is None or p_conf < PRINTED_MIN_CONF:
             r["status"], r["why"] = ("blank", "") if not ans else ("review", "couldn't read the printed numbers")
             if correct is None:
                 r["why"] = r["why"] or "couldn't read the printed numbers"
-            results.append(r)
             continue
-        verdicts = {k: judge(lps[k][:, i : i + 1], correct, abc) for k in kinds}
+        r["status"], r["given"], r["conf"] = judge(tight[:, i : i + 1], correct, abc)
+        if r["status"] == "review":
+            unclear.append(i)  # decided below, with the wider answer crops
+        else:
+            finish(r, q)
+
+    # Only unclear answers need the wider crops (both ANS rows / + the strip above): read just those.
+    kinds = ["tight", "rows", "above"] if WIDE_CROPS else ["tight"]
+    wide = {"tight": tight[:, unclear]}
+    if unclear:
+        for k in kinds[1:]:
+            wide[k] = reader.answer_log_probs([qs[i]["answer_crops"][k] for i in unclear])[0]
+    for j, i in enumerate(unclear):
+        r, correct = results[i], results[i]["correct"]
+        lps = {k: wide[k][:, j : j + 1] for k in kinds}
+        verdicts = {k: judge(lps[k], correct, abc) for k in kinds}
         status, ans, conf = verdicts["tight"]
-        p_correct = max(float(np.exp(ctc.string_logprob(lps[k][:, i : i + 1], [fmt(correct)], abc)[0])) for k in kinds)
-        if status == "review" and ans and p_correct < ABSENT_MAX:
+        p_correct = max(float(np.exp(ctc.string_logprob(lps[k], [fmt(correct)], abc)[0])) for k in kinds)
+        if ans and p_correct < ABSENT_MAX:
             status = "wrong"  # whatever exactly the child wrote, it is not the correct answer
-        if status == "review" and len(kinds) > 1:
+        elif len(kinds) > 1:
             # Digits may spill out of the first ANS row: use the crop the reader is most sure about.
             best = max(kinds, key=lambda k: verdicts[k][2])
             status, ans, conf = verdicts[best]
             r["crop"] = best
-        if status == "blank" and normalize(q["answer"]).max() > 0:
-            status = "review"  # the reader saw nothing, but there is ink in the answer cell
         r["status"], r["given"], r["conf"] = status, ans, conf
-        if status == "review":
-            r["why"] = f"handwriting unclear (best guess {ans})"
-        results.append(r)
+        finish(r, qs[i])
     return results
+
+
+def finish(r, q):
+    if r["status"] == "blank" and normalize(q["answer"]).max() > 0:
+        r["status"] = "review"  # the reader saw nothing, but there is ink in the answer cell
+    if r["status"] == "review":
+        r["why"] = f"handwriting unclear (best guess {r['given']})"
 
 
 COLORS = {"right": (40, 160, 40), "wrong": (30, 30, 220), "review": (0, 140, 255), "blank": (150, 150, 150)}

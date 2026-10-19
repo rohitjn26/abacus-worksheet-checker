@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Abacus Checker</string>
+    <string name="starting_camera">Starting camera…</string>
+    <string name="take_photo">Take photo</string>
+    <string name="need_camera">The app needs the camera to photograph the worksheet.</string>
+    <string name="photo_failed">Could not take the photo. Please try again.</string>
+    <string name="checking">Checking the worksheet…</string>
+    <string name="retake_title">Please retake the photo</string>
+    <string name="retake">Retake</string>
+    <string name="use_anyway">Use anyway</string>
+    <string name="summary">✅ %1$d right   ❌ %2$d wrong   🟠 %3$d please check\nOK = right · X n = wrong (n = correct answer) · ? = n: please check, expected answer n</string>
+    <string name="low_quality_note">Photo quality was low – please look over the marks.</string>
+    <string name="nothing_found">No answers could be checked on this photo. Please retake it with the whole sheet in view.</string>
+    <string name="check_another">Check another sheet</string>
+    <string name="sheet_description">The worksheet with each answer marked</string>
+</resources>

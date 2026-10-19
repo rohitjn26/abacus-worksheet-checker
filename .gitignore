@@ -24,3 +24,12 @@ prototype/augset.npz
 prototype/degrade_results*.json
 prototype/results_new/
 .venv-android/
+
+# Android build outputs
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+android/build.log
+android/.kotlin/
+*.apk
