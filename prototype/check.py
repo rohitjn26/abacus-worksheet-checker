@@ -8,14 +8,12 @@ from decimal import Decimal, InvalidOperation
 from pathlib import Path
 import cv2
 import numpy as np
-import torch
+import ctc
 from cells import label_cells, split_table, table_rows
 from grid import find_tables, fix_orientation, grid_lines
-from model import decode, load_reader
-from hand_reader import HandReader
-from norm import ALPHABET, clean_printed, normalize
-from model import string_logprob
+from norm import ALPHABET, normalize
 from policy import decide
+from runtime import HAND_ALPHABET, Models
 from quality import retake_reasons
 
 PRINTED_MIN_CONF = 0.90   # below this, a printed number is not trusted -> teacher review (see calibrate.py)
@@ -25,22 +23,20 @@ CELL = re.compile(r"^([×÷+]?)(-?\d+(?:\.\d+)?)$")
 HAND_READER = "paddle"  # "paddle": PaddleOCR (frozen) + trained head for answers; "own": our model
 READER_WEIGHTS = "reader_v4.pt"   # our model (printed numbers, headers, ANS)
 HAND_HEAD = "hand_head_v2.pt"     # head on frozen PaddleOCR for handwritten answers
-PRINTED_READER = "own"  # "own": our model for printed numbers / headers / ANS; "paddle": PaddleOCR + full head
 
 
 class Reader:
-    def __init__(self, weights=None, hand=None, printed=None, hand_head=None):
-        self.model = load_reader(weights or READER_WEIGHTS)
-        self.model.eval()
-        hand = hand or HAND_READER
-        self.hand = HandReader(head_path=hand_head or HAND_HEAD) if hand == "paddle" else None
-        printed = printed or PRINTED_READER
-        self.paddle_all = HandReader(head_path="full_head.pt", alphabet=ALPHABET) if printed == "paddle" else None
+    """Reads cells with the ONNX models (runtime.py). backend: None = onnxruntime; the Android app passes
+    its Kotlin bridge."""
+
+    def __init__(self, weights=None, hand=None, hand_head=None, backend=None):
+        self.models = Models(reader=weights or READER_WEIGHTS, hand_head=hand_head or HAND_HEAD, backend=backend)
+        self.hand = (hand or HAND_READER) == "paddle"
 
     def answer_log_probs(self, crops):
         """(log-probs, alphabet) for handwritten answer crops."""
         if self.hand:
-            return self.hand.log_probs(crops), self.hand.alphabet
+            return self.models.hand_log_probs(crops), HAND_ALPHABET
         return self.log_probs(crops), ALPHABET
 
     def is_ans(self, cell):
@@ -48,14 +44,10 @@ class Reader:
         return text == "ANS" and conf >= 0.5
 
     def log_probs(self, crops, printed=False):
-        if self.paddle_all is not None:
-            return self.paddle_all.log_probs([clean_printed(c) if printed else c for c in crops])
-        x = torch.from_numpy(np.stack([normalize(c, printed) for c in crops]))[:, None]
-        with torch.no_grad():
-            return self.model(x)
+        return self.models.reader_log_probs(np.stack([normalize(c, printed) for c in crops])[:, None])
 
     def __call__(self, crops, printed=False):
-        return decode(self.log_probs(crops, printed)) if crops else []
+        return ctc.decode(self.log_probs(crops, printed), ALPHABET) if crops else []
 
 
 def evaluate(cells):
@@ -97,14 +89,14 @@ WIDE_CROPS = True  # if the tight crop is unclear, also try both ANS rows / both
 
 def judge(lp, correct, alphabet):
     """Read one answer from its log-probs and decide right / wrong / review against the correct answer."""
-    (ans, conf), = decode(lp, alphabet)
+    (ans, conf), = ctc.decode(lp, alphabet)
     given = as_number(ans)
     if not ans:
         return "blank", ans, conf
     if given is None:
         return "review", ans, conf
     read = fmt(given)
-    alt = (string_logprob(lp, [fmt(correct)], alphabet) - string_logprob(lp, [ans], alphabet)).exp().item()
+    alt = float(np.exp(ctc.string_logprob(lp, [fmt(correct)], alphabet) - ctc.string_logprob(lp, [ans], alphabet))[0])
     return decide(read, conf, fmt(correct), alt), ans, conf
 
 
@@ -164,7 +156,7 @@ def check_table(table, xs, reader):
         correct = evaluate(nums)
         r = {"q": i + 1, "numbers": nums, "correct": correct, "box": q["answer_box"], "printed_conf": p_conf,
              "col_w": float(np.median(np.diff(xs)))}
-        (ans, conf), = decode(lps["tight"][:, i : i + 1], abc)
+        (ans, conf), = ctc.decode(lps["tight"][:, i : i + 1], abc)
         r["given"], r["conf"] = ans, conf
         if (q["missing_number"] or i in short) and ans:
             # Other columns have a number in a row where this one came out blank: a printed number was lost.
@@ -179,7 +171,7 @@ def check_table(table, xs, reader):
             continue
         verdicts = {k: judge(lps[k][:, i : i + 1], correct, abc) for k in kinds}
         status, ans, conf = verdicts["tight"]
-        p_correct = max(string_logprob(lps[k][:, i : i + 1], [fmt(correct)], abc).exp().item() for k in kinds)
+        p_correct = max(float(np.exp(ctc.string_logprob(lps[k][:, i : i + 1], [fmt(correct)], abc)[0])) for k in kinds)
         if status == "review" and ans and p_correct < ABSENT_MAX:
             status = "wrong"  # whatever exactly the child wrote, it is not the correct answer
         if status == "review" and len(kinds) > 1:

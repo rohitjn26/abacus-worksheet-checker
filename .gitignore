@@ -23,3 +23,4 @@ paddle_exp/*
 prototype/augset.npz
 prototype/degrade_results*.json
 prototype/results_new/
+.venv-android/

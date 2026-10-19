@@ -9,8 +9,6 @@ The correct answer never creates a 'right' from an unclear reading; it only stop
 """
 import json
 import numpy as np
-import torch
-from model import string_logprob
 
 RIGHT_MIN_CONF = 0.5      # reading equals the correct answer: accept unless the reader is basically guessing
 WRONG_MIN_CONF = 0.95     # reading differs: the reader must be sure of what it read ...
@@ -30,6 +28,8 @@ def decide(read, conf, correct, alt_ratio):
 
 if __name__ == "__main__":
     import sys
+    import torch
+    from model import string_logprob
     from decimal import Decimal
     from model import decode, load_reader
     from check import evaluate, fmt

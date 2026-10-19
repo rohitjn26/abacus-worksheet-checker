@@ -16,7 +16,11 @@ answer in the ANS row) and marks every answer right, wrong, or "please check". R
      frozen (run via ONNX, 22 MB) plus a small head trained on our cells. Pretraining on millions of
      real text images reads children's handwriting better than our model (held-out cells: ~88% vs 81%).
 
-   Both run with ONNX / PyTorch only, so the pipeline can move to Android / iOS.
+   At check time all models run through ONNX (`runtime.py`) and CTC decoding is plain numpy (`ctc.py`):
+   no PyTorch, so the same Python runs on a Mac and inside the Android app. PyTorch is only used to train;
+   `export_models.py` turns trained weights into `.onnx`. `parity_dump.py` compares every verdict between
+   two versions of the code (PyTorch vs ONNX: identical; Python 3.10 + OpenCV 4.5 as on Android: no
+   wrong marks, 11 of 605 borderline readings differ).
 4. **Work out the correct answer** in code, top to bottom (`+`, `−`, `×`, `÷`, decimals).
 5. **Decide**:
    - reading matches the correct answer → right
