@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- Marked sheets live in the app's cache; shared to other apps through this provider. -->
+    <cache-path name="sheets" path="." />
+</paths>

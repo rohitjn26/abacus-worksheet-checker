@@ -3,15 +3,28 @@
     <string name="app_name">Abacus Checker</string>
     <string name="starting_camera">Starting camera…</string>
     <string name="take_photo">Take photo</string>
+    <string name="gallery">Gallery</string>
+    <string name="results">Results</string>
+    <string name="results_n">Results (%1$d)</string>
+    <string name="results_checking">Results (%1$d)\nchecking %2$d…</string>
+    <string name="results_title">Checked sheets</string>
+    <string name="take_more">Take more photos</string>
+    <string name="sheet_added">%1$s added – checking…</string>
     <string name="need_camera">The app needs the camera to photograph the worksheet.</string>
+    <string name="need_storage">The app needs storage access to save the file.</string>
     <string name="photo_failed">Could not take the photo. Please try again.</string>
-    <string name="checking">Checking the worksheet…</string>
+    <string name="checking">Checking…</string>
     <string name="retake_title">Please retake the photo</string>
     <string name="retake">Retake</string>
     <string name="use_anyway">Use anyway</string>
-    <string name="summary">✅ %1$d right   ❌ %2$d wrong   🟠 %3$d please check\nOK = right · X n = wrong (n = correct answer) · ? = n: please check, expected answer n</string>
+    <string name="legend">OK = right · X n = wrong (n = correct answer) · ? = n: please check, expected answer n</string>
     <string name="low_quality_note">Photo quality was low – please look over the marks.</string>
-    <string name="nothing_found">No answers could be checked on this photo. Please retake it with the whole sheet in view.</string>
-    <string name="check_another">Check another sheet</string>
     <string name="sheet_description">The worksheet with each answer marked</string>
+    <string name="zoom_hint">Pinch or double-tap to zoom</string>
+    <string name="share">Share</string>
+    <string name="share_with">Share the checked sheet</string>
+    <string name="save_image">Save image</string>
+    <string name="save_pdf">Save PDF</string>
+    <string name="saved_to">Saved to %1$s</string>
+    <string name="save_failed">Could not save the file.</string>
 </resources>

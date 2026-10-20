@@ -3,11 +3,17 @@
 
     <uses-feature android:name="android.hardware.camera.any" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <!-- Only Android 9 and older need this to save pictures / PDFs to the phone's folders. -->
+    <uses-permission
+        android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="28" />
 
     <application
+        android:name=".AbacusApp"
         android:allowBackup="false"
         android:icon="@drawable/ic_launcher"
         android:label="@string/app_name"
+        android:requestLegacyExternalStorage="true"
         android:theme="@style/Theme.AbacusChecker">
         <activity
             android:name=".MainActivity"
@@ -19,7 +25,21 @@
             </intent-filter>
         </activity>
         <activity
-            android:name=".ResultActivity"
+            android:name=".SheetsActivity"
+            android:exported="false"
+            android:screenOrientation="portrait" />
+        <activity
+            android:name=".SheetActivity"
             android:exported="false" />
+
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

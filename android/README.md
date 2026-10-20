@@ -1,4 +1,4 @@
-# Abacus Checker – Android app (v0.1)
+# Abacus Checker – Android app (v0.3)
 
 For parents at home: photograph the worksheet, get every answer marked right / wrong / please check.
 Runs fully offline; nothing leaves the phone.
@@ -7,12 +7,17 @@ Runs fully offline; nothing leaves the phone.
 
 - **Camera screen** (Kotlin, CameraX): live preview and a hint under it, from cheap checks on each preview
   frame (`LiveQuality.kt`): too dark, light reflecting, hold steady, or "looks good" (green shutter).
+  **Gallery** picks one or more existing photos; **Results (n)** opens the list.
+- **Several sheets in a row**: every photo is queued and checked in the background (`Sheets.kt`), so the
+  parent can take the next one straight away. The results list shows each sheet: checking / summary /
+  "please retake" with **Retake** and **Use anyway**.
+- **One sheet** (`SheetActivity`): pinch / double-tap zoom (`ZoomImageView`), **Share** (Android share
+  menu: WhatsApp, Gmail, Telegram ... as a picture), **Save image** (Pictures/Abacus Checker) and
+  **Save PDF** (Download/Abacus Checker; A4, title + summary + key, sheet split over pages if tall).
+- All screens keep their buttons clear of the status bar and the back / home buttons (`Insets.kt`).
 - **After the photo**: the tested Python checker from `../prototype` runs on the phone through
   [Chaquopy](https://chaquo.com/chaquopy/) (Python 3.10, numpy, OpenCV 4.5). The models run in Kotlin with
   ONNX Runtime for Android (`OnnxBridge.kt`), called from Python (`app/src/main/python/android_api.py`).
-- **If the photo isn't good enough** (`quality.retake_reasons`): a dialog with the reason, **Retake** and
-  **Use anyway** (results then carry a "photo quality was low" note).
-- **Result screen**: the marked sheet (OK / X n / ? = n) and a summary.
 
 The checker's `.py` files and the three `.onnx` models are copied from `../prototype` at build time
 (`syncEnginePython`, `syncEngineModels` in `app/build.gradle.kts`), so the app ships exactly the tested code.
@@ -42,7 +47,9 @@ adb logcat -s AbacusResult
 On the Android emulator (Pixel 6, Android 15, on an Apple-silicon Mac) a photo takes about 7–9 s to check
 and gives the same verdicts as the Mac. A real phone may be slower; not yet measured.
 
-## Known limits (v0.1)
+## Known limits (v0.3)
+
+- Results live only while the app is open (not stored between sessions).
 
 - English only; arm64 phones only (nearly all phones from the last ~6 years).
 - Live-hint thresholds were set from WhatsApp photos, not live camera frames; tune them on real phones.
