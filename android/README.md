@@ -32,6 +32,14 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=$HOME/Library/Android
 ./gradlew clean assembleDebug  # -> app/build/outputs/apk/debug/app-debug.apk (~71 MB, arm64 phones)
 ```
 
+## Try it on the Mac (no phone needed)
+
+`./run_on_mac.sh` opens a virtual Android phone in a window (the emulator set up for this project),
+uses the Mac's webcam as the phone's camera, installs the newest `AbacusChecker-*.apk` and starts the app.
+`PHOTOS=../19022026 ./run_on_mac.sh` also puts those photos in the phone's gallery, for the Gallery button.
+Saved images / PDFs: `adb pull "/sdcard/Download/Abacus Checker" .`
+Checking is somewhat faster here than on a typical phone.
+
 ## Testing without a camera (debug builds only)
 
 Copy a photo into the app and pass it in; the result is logged under the tag `AbacusResult`
