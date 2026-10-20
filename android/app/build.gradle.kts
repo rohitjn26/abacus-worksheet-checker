@@ -15,7 +15,7 @@ val syncEnginePython by tasks.registering(Sync::class) {
     into(enginePy)
 }
 val syncEngineModels by tasks.registering(Sync::class) {
-    from(prototype) { include("reader_v4.onnx", "hand_head_v2.onnx", "ppocrv5_mobile_frozen.onnx") }
+    from(prototype) { include("reader_v4_int8.onnx", "hand_head_v2.onnx", "ppocrv5_mobile_frozen_fp16w.onnx") }
     into(engineAssets)
 }
 
@@ -31,7 +31,17 @@ android {
         ndk { abiFilters += listOf("arm64-v8a") }
     }
     buildTypes {
-        release { isMinifyEnabled = false }
+        // Shrink unused Android / library code (R8). Classes Python reaches by name are kept in proguard-rules.pro.
+        debug {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17

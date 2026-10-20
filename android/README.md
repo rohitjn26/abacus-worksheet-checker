@@ -24,7 +24,7 @@ Needs JDK 17 and the Android SDK (platform 35, build-tools 35), plus Python 3.10
 
 ```bash
 export JAVA_HOME=/opt/homebrew/opt/openjdk@17 ANDROID_HOME=$HOME/Library/Android/sdk
-./gradlew assembleDebug        # -> app/build/outputs/apk/debug/app-debug.apk (~90 MB, arm64 phones)
+./gradlew clean assembleDebug  # -> app/build/outputs/apk/debug/app-debug.apk (~71 MB, arm64 phones)
 ```
 
 ## Testing without a camera (debug builds only)
@@ -46,5 +46,7 @@ and gives the same verdicts as the Mac. A real phone may be slower; not yet meas
 
 - English only; arm64 phones only (nearly all phones from the last ~6 years).
 - Live-hint thresholds were set from WhatsApp photos, not live camera frames; tune them on real phones.
-- ~90 MB, mostly Python + numpy + OpenCV + the models. A native Kotlin port of the checker would roughly
-  halve it and speed it up.
+- ~71 MB: Python + numpy + OpenCV (~30 MB), ONNX Runtime (~17 MB), models (13 MB: printed-number reader
+  in 8-bit, PaddleOCR weights stored 16-bit - both give the same results on all 25 photos), app code
+  (~4 MB, shrunk with R8). A native Kotlin port of the checker (no Python) would bring it to ~35 MB.
+- Always build with `clean`: incremental debug builds leave unused space in the APK (90 MB instead of 71).

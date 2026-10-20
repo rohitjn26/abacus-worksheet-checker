@@ -21,16 +21,18 @@ CELL = re.compile(r"^([×÷+]?)(-?\d+(?:\.\d+)?)$")
 
 
 HAND_READER = "paddle"  # "paddle": PaddleOCR (frozen) + trained head for answers; "own": our model
-READER_WEIGHTS = "reader_v4.pt"   # our model (printed numbers, headers, ANS)
+READER_WEIGHTS = "reader_v4_int8.onnx"  # our model (printed numbers, headers, ANS); 8-bit, same results as reader_v4
 HAND_HEAD = "hand_head_v2.pt"     # head on frozen PaddleOCR for handwritten answers
+PADDLE_ONNX = "ppocrv5_mobile_frozen_fp16w.onnx"  # frozen PaddleOCR layers; weights stored 16-bit, same results
 
 
 class Reader:
     """Reads cells with the ONNX models (runtime.py). backend: None = onnxruntime; the Android app passes
     its Kotlin bridge."""
 
-    def __init__(self, weights=None, hand=None, hand_head=None, backend=None):
-        self.models = Models(reader=weights or READER_WEIGHTS, hand_head=hand_head or HAND_HEAD, backend=backend)
+    def __init__(self, weights=None, hand=None, hand_head=None, backend=None, paddle=None):
+        self.models = Models(reader=weights or READER_WEIGHTS, hand_head=hand_head or HAND_HEAD,
+                             paddle=paddle or PADDLE_ONNX, backend=backend)
         self.hand = (hand or HAND_READER) == "paddle"
 
     def answer_log_probs(self, crops):

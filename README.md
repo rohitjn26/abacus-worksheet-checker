@@ -74,6 +74,7 @@ Marked sheets are written to `prototype/results/`:
 | `calibrate.py`, `e2e.py` | Accuracy measurement on held-out photos |
 | `testset.json` | Hand transcription of the sample worksheets |
 | `reader_v4.pt` | Our model: printed numbers, headers, ANS label (reads "ANS", "A N S", "Ans", "ans") |
+| `reader_v4_int8.onnx`, `ppocrv5_mobile_frozen_fp16w.onnx` | What the checker runs: 8-bit reader, PaddleOCR with 16-bit stored weights (same results; `quantize_models.py`, `fp16_storage.py`, checked with `compare_quant.py`) |
 | `hand_reader.py`, `hand_head_v2.pt`, `ppocrv5_mobile_frozen.onnx` | Handwriting reader: frozen PaddleOCR + trained head |
 | `quality.py`, `degrade_test.py` | Photo-quality check (retake requests) and the bad-photo stress test |
 | `augment_photos.py` | Whole-photo augmentation of the training photos |
