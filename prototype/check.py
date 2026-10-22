@@ -86,6 +86,7 @@ def fmt(d):
 
 ABSENT_MAX = 1e-5  # if even the best crop gives "child wrote exactly the correct answer" less than this
                    # probability, the answer is wrong (wrong digit count, a clear digit not in the answer...)
+RIGHT_SURE = 0.9  # a "right" read with less certainty than this must be confirmed by every answer view
 WIDE_CROPS = True  # if the tight crop is unclear, also try both ANS rows / both rows + the strip above
 
 
@@ -168,7 +169,7 @@ def check_table(table, xs, reader):
                 r["why"] = r["why"] or "couldn't read the printed numbers"
             continue
         r["status"], r["given"], r["conf"] = judge(tight[:, i : i + 1], correct, abc)
-        if r["status"] == "review":
+        if r["status"] == "review" or (r["status"] == "right" and r["conf"] < RIGHT_SURE):
             unclear.append(i)  # decided below, with the wider answer crops
         else:
             finish(r, q)
@@ -184,6 +185,16 @@ def check_table(table, xs, reader):
         lps = {k: wide[k][:, j : j + 1] for k in kinds}
         verdicts = {k: judge(lps[k], correct, abc) for k in kinds}
         status, ans, conf = verdicts["tight"]
+        if status == "right":
+            # Not clear-cut: keep the tick only if no view reads anything else (e.g. the top of a 9 cut off
+            # by the ANS line reads as a 4 in one crop and as a 9 in another).
+            if all(v[0] in ("right", "blank") for v in verdicts.values()):
+                r["status"], r["given"], r["conf"] = status, ans, conf
+            else:
+                other = next(v[1] for v in verdicts.values() if v[0] not in ("right", "blank"))
+                r["status"], r["given"], r["conf"] = "review", other, conf
+            finish(r, qs[i])
+            continue
         p_correct = max(float(np.exp(ctc.string_logprob(lps[k], [fmt(correct)], abc)[0])) for k in kinds)
         if ans and p_correct < ABSENT_MAX:
             status = "wrong"  # whatever exactly the child wrote, it is not the correct answer

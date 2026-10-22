@@ -19,6 +19,7 @@ TEST_PHOTOS = [  # held out: never used for training (re-shots of a held-out pag
     "19022026/WhatsApp Image 2026-10-19 at 14.42.06 (2).jpeg",  # new page, 2-digit numbers
     "19022026/WhatsApp Image 2026-10-19 at 14.42.08 (2).jpeg",
     "19022026/WhatsApp Image 2026-10-19 at 14.42.09 (2).jpeg",
+    "single_sums/WhatsApp Image 2026-10-22 at 15.10.58.jpeg",  # the '89' read as '84' case
 ]
 
 CALIB_PHOTOS = [  # kept out of training too: used only to calibrate confidence (never the test photos)
