@@ -45,6 +45,33 @@ def blank_printed(gray, y_cut):
     return out
 
 
+def keep_pen_on_lines(gray, mask, near=3, far=7):
+    """Remove from a grid-line mask the places where a pen stroke crosses or leaves the line, so erasing
+    the line does not erase the stroke (e.g. the top of a 9 drawn on the ANS line). A stretch of line is
+    'written on' where ink continues a few pixels away from it (above / below a horizontal line, left /
+    right of a vertical one) - a digit merely resting near the line does not count."""
+    ink = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 12)
+    band = cv2.dilate(mask, np.ones((3, 3), np.uint8))
+    off = (ink > 0) & (band == 0)
+    away = np.zeros_like(off)
+    for d in range(near, far + 1):  # ink d pixels above / below / left / right of a line pixel
+        away |= np.roll(off, d, 0) | np.roll(off, -d, 0) | np.roll(off, d, 1) | np.roll(off, -d, 1)
+    keep = (band > 0) & away & (cv2.dilate(off.astype(np.uint8), np.ones((near + 2, near + 2), np.uint8)) > 0)
+    return np.where(keep, 0, mask).astype(np.uint8)
+
+
+def printed_bottom(table, lines, x0, x1, y0, y1):
+    """Lowest row of the printed number's ink inside the number cell (y0, y1), in table coordinates.
+    Blobs touching the cell's bottom line are the child's writing reaching up, not the printed number."""
+    cell = clean_crop(table, lines, x0, x1, y0, y1)
+    bw = cv2.adaptiveThreshold(cell, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 25, 15)
+    n, _, stats, _ = cv2.connectedComponentsWithStats(bw)
+    h = y1 - y0
+    bottoms = [stats[i, 1] + stats[i, 3] for i in range(1, n)
+               if stats[i, 3] > 0.25 * h and stats[i, 1] + stats[i, 3] < h - 3]
+    return y0 + max(bottoms) if bottoms else y0 + h // 2
+
+
 def answer_crops(table, lines, x0, x1, ys, j, pitch):
     """Answer crops from tight to wide; wider ones catch digits spilling out of the first ANS row.
 
@@ -59,7 +86,14 @@ def answer_crops(table, lines, x0, x1, ys, j, pitch):
     up = int(p * 0.6)
     above = clean_crop(table, lines, x0, x1, ys[j], below2, pad_y=up, pad_bottom=int(p * 0.15))
     above = blank_printed(above, y_cut=min(up, ys[j]) - 1)
-    return {"tight": tight, "rows": rows, "above": above}
+    # full: from just below the last printed number down to the bottom of the second ANS row - all the room
+    # the child's writing uses - with grid lines erased only where no pen touches them.
+    top = printed_bottom(table, lines, x0, x1, ys[j - 1], ys[j]) + 2 if j > 0 else max(ys[j] - p // 2, 0)
+    bottom = min(below2 + int(p * 0.15), table.shape[0])
+    gray = cv2.cvtColor(table[top:bottom, x0:x1], cv2.COLOR_BGR2GRAY)
+    mask = keep_pen_on_lines(gray, cv2.dilate(lines[top:bottom, x0:x1], np.ones((3, 3), np.uint8)))
+    full = cv2.inpaint(gray, mask, 3, cv2.INPAINT_TELEA)
+    return {"tight": tight, "rows": rows, "above": above, "full": full}
 
 
 def extend_to_edges(ys, pitch, height):

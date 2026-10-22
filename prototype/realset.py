@@ -65,6 +65,8 @@ def cells_from_image(img, fname, tables, reader, verify=False):
                     rows.append((normalize(cell), str(n), "printed", fname, f"{tag} r{ri + 1}", cell))
             if ans not in ("?", ""):  # "" = left unanswered
                 rows.append((normalize(q["answer"]), ans, "hand", fname, tag, q["answer"]))
+                full = q["answer_crops"]["full"]  # the full answer view, for training the handwriting head
+                rows.append((normalize(full), ans, "hand", fname, tag + " full", full))
         if rows is None or (verify and len(qs) != len(gt["numbers"])):
             continue
         if verify:

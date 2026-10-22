@@ -87,7 +87,7 @@ def fmt(d):
 ABSENT_MAX = 1e-5  # if even the best crop gives "child wrote exactly the correct answer" less than this
                    # probability, the answer is wrong (wrong digit count, a clear digit not in the answer...)
 RIGHT_SURE = 0.9  # a "right" read with less certainty than this must be confirmed by every answer view
-WIDE_CROPS = True  # if the tight crop is unclear, also try both ANS rows / both rows + the strip above
+VIEWS = ["tight", "full", "rows", "above"]  # answer views: the first is read for every answer, the rest when unclear
 
 
 def judge(lp, correct, alphabet):
@@ -147,7 +147,7 @@ def short_numbers(qs):
 
 def check_table(table, xs, reader):
     qs = split_table(table, xs, read=lambda cell: reader([cell], printed=True)[0][0], is_ans=reader.is_ans)
-    tight, abc = reader.answer_log_probs([q["answer_crops"]["tight"] for q in qs])
+    tight, abc = reader.answer_log_probs([q["answer_crops"][VIEWS[0]] for q in qs])
     short = short_numbers(qs)
     results, unclear = [], []
     for i, q in enumerate(qs):
@@ -175,8 +175,8 @@ def check_table(table, xs, reader):
             finish(r, q)
 
     # Only unclear answers need the wider crops (both ANS rows / + the strip above): read just those.
-    kinds = ["tight", "rows", "above"] if WIDE_CROPS else ["tight"]
-    wide = {"tight": tight[:, unclear]}
+    kinds = VIEWS
+    wide = {kinds[0]: tight[:, unclear]}
     if unclear:
         for k in kinds[1:]:
             wide[k] = reader.answer_log_probs([qs[i]["answer_crops"][k] for i in unclear])[0]
@@ -184,7 +184,7 @@ def check_table(table, xs, reader):
         r, correct = results[i], results[i]["correct"]
         lps = {k: wide[k][:, j : j + 1] for k in kinds}
         verdicts = {k: judge(lps[k], correct, abc) for k in kinds}
-        status, ans, conf = verdicts["tight"]
+        status, ans, conf = verdicts[kinds[0]]
         if status == "right":
             # Not clear-cut: keep the tick only if no view reads anything else (e.g. the top of a 9 cut off
             # by the ANS line reads as a 4 in one crop and as a 9 in another).
