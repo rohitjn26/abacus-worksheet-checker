@@ -33,3 +33,4 @@ android/local.properties
 android/build.log
 android/.kotlin/
 *.apk
+prototype/stages/
